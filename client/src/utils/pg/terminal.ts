@@ -1,5 +1,6 @@
 import {
   GITHUB_URL,
+  OTHER_ERROR,
   PROGRAM_ERROR,
   PROJECT_NAME,
   RPC_ERROR,
@@ -145,14 +146,21 @@ See the list of available crates and request new crates from here: ${PgTerminal.
     // Descriptive program errors
     if (msg.startsWith("failed to send")) {
       const parts = msg.split(":");
-      if (parts.length !== 4) return msg;
+      // With ix index
+      if (parts.length === 4) {
+        const ixIndex = parts[2][parts[2].length - 1];
+        const programError = parts[3][1].toUpperCase() + parts[3].substring(2);
 
-      const ixIndex = parts[2][parts[2].length - 1];
-      const programError = parts[3][1].toUpperCase() + parts[3].substring(2);
+        msg = `\n${this.bold("Instruction index:")} ${ixIndex}\n${this.bold(
+          "Reason:"
+        )} ${programError}.`;
 
-      msg = `\n${this.bold("Instruction index:")} ${ixIndex}\n${this.bold(
-        "Reason:"
-      )} ${programError}.`;
+        return msg;
+      }
+
+      // Without ix index
+      const programError = parts[2][1].toUpperCase() + parts[2].substring(2);
+      msg = `\n${this.bold("Reason:")} ${programError}.`;
 
       return msg;
     }
@@ -169,6 +177,14 @@ See the list of available crates and request new crates from here: ${PgTerminal.
     for (const serverError in SERVER_ERROR) {
       if (msg === serverError) {
         msg = SERVER_ERROR[serverError];
+        return msg;
+      }
+    }
+
+    // Other errors
+    for (const otherError in OTHER_ERROR) {
+      if (msg === otherError) {
+        msg = OTHER_ERROR[otherError];
         return msg;
       }
     }

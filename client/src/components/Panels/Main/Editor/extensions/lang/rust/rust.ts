@@ -1,4 +1,3 @@
-import { parser } from "@lezer/rust";
 import {
   continuedIndent,
   indentNodeProp,
@@ -9,6 +8,8 @@ import {
 } from "@codemirror/language";
 import { styleTags, tags as t } from "@codemirror/highlight";
 import { completeFromList, ifNotIn } from "@codemirror/autocomplete";
+
+import { parser } from "./parser";
 import snippets from "./snippets";
 
 const rustLanguage = LRLanguage.define({
@@ -90,7 +91,7 @@ const rustLanguage = LRLanguage.define({
 });
 
 /// Rust language support
-export default function rust() {
+export const rust = () => {
   return new LanguageSupport(
     rustLanguage,
     rustLanguage.data.of({
@@ -100,4 +101,4 @@ export default function rust() {
       ),
     })
   );
-}
+};

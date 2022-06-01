@@ -1,8 +1,12 @@
 import { EditorView, ViewUpdate } from "@codemirror/view";
 
-import { PgExplorer, FullFile } from "../../../../../utils/pg/explorer";
+import { PgExplorer, FullFile } from "../../../../../../utils/pg/explorer";
 
-const autosave = (explorer: PgExplorer, curFile: FullFile, ms: number) => {
+export const autosave = (
+  explorer: PgExplorer,
+  curFile: FullFile,
+  ms: number
+) => {
   let timeoutId: NodeJS.Timeout;
 
   return EditorView.updateListener.of((v: ViewUpdate) => {
@@ -15,5 +19,3 @@ const autosave = (explorer: PgExplorer, curFile: FullFile, ms: number) => {
     }
   });
 };
-
-export default autosave;

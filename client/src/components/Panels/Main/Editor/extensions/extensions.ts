@@ -8,7 +8,7 @@ import {
 import { Extension, EditorState } from "@codemirror/state";
 import { history, historyKeymap } from "@codemirror/history";
 import { foldGutter, foldKeymap } from "@codemirror/fold";
-import { indentOnInput } from "@codemirror/language";
+import { indentOnInput, indentUnit } from "@codemirror/language";
 import { lineNumbers, highlightActiveLineGutter } from "@codemirror/gutter";
 import { defaultKeymap } from "@codemirror/commands";
 import { bracketMatching } from "@codemirror/matchbrackets";
@@ -19,10 +19,10 @@ import { rectangularSelection } from "@codemirror/rectangular-selection";
 import { defaultHighlightStyle } from "@codemirror/highlight";
 import { lintKeymap } from "@codemirror/lint";
 
-// The packages we customized
+// Packages we customized/added
 import { indentWithTab } from "@codemirror/commands";
-import rust from "../lang";
-import search from "../search";
+import { rust } from "./lang";
+import { highlightSelectionMatches, searchKeymap } from "./search";
 
 export const getExtensions = (): Extension[] => {
   return [
@@ -41,8 +41,9 @@ export const getExtensions = (): Extension[] => {
     autocompletion(),
     rectangularSelection(),
     highlightActiveLine(),
-    search.highlightSelectionMatches(),
+    highlightSelectionMatches(),
     rust(),
+    indentUnit.of("    "),
     keymap.of([
       ...defaultKeymap,
       ...closeBracketsKeymap,
@@ -51,7 +52,7 @@ export const getExtensions = (): Extension[] => {
       ...commentKeymap,
       ...completionKeymap,
       ...lintKeymap,
-      ...search.searchKeymap,
+      ...searchKeymap,
       indentWithTab,
     ]),
   ];

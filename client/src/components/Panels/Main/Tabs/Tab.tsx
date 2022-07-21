@@ -1,4 +1,4 @@
-import { FC, MouseEvent, useRef } from "react";
+import { FC, MouseEvent, useCallback, useRef } from "react";
 import { useAtom } from "jotai";
 import styled, { css } from "styled-components";
 
@@ -19,25 +19,27 @@ const Tab: FC<TabProps> = ({ current, path }) => {
 
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
-  const fileName = PgExplorer.getItemNameFromPath(path);
+  const closeTab = useCallback(() => {
+    if (!explorer) return;
 
-  if (!fileName) return null;
+    explorer.removeFromTabs(path);
+    refresh();
+  }, [explorer, path, refresh]);
 
   const changeTab = (e: MouseEvent<HTMLDivElement>) => {
-    if (closeButtonRef.current?.contains(e.target as Node)) return;
+    if (closeButtonRef.current?.contains(e.target as Node) || !explorer) return;
 
-    explorer?.changeCurrentFile(path);
-    refresh();
-  };
-
-  const closeTab = () => {
-    explorer?.removeFromTabs(path);
+    explorer.changeCurrentFile(path);
     refresh();
   };
 
   const handleContextMenu = (e: MouseEvent) => {
     e.preventDefault();
   };
+
+  const fileName = PgExplorer.getItemNameFromPath(path);
+
+  if (!fileName) return null;
 
   return (
     <Wrapper
@@ -47,7 +49,12 @@ const Tab: FC<TabProps> = ({ current, path }) => {
     >
       <LangIcon fileName={fileName} />
       <Name>{fileName}</Name>
-      <Button ref={closeButtonRef} kind="icon" onClick={closeTab} title="Close">
+      <Button
+        ref={closeButtonRef}
+        kind="icon"
+        onClick={closeTab}
+        title="Close (Alt+W)"
+      >
         <Close />
       </Button>
     </Wrapper>
@@ -62,7 +69,7 @@ const Wrapper = styled.div<{ current?: boolean }>`
     align-items: center;
     justify-content: center;
     background-color: ${current
-      ? theme.colors.default.bg
+      ? theme.colors.default.bgPrimary
       : theme.colors.right?.bg};
     color: ${current
       ? theme.colors.default.textPrimary

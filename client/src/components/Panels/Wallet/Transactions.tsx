@@ -6,11 +6,11 @@ import styled, { css } from "styled-components";
 
 import Button from "../../Button";
 import Link from "../../Link";
-import useCurrentWallet from "./useCurrentWallet";
 import { connAtom } from "../../../state";
 import { PgCommon } from "../../../utils/pg";
 import { Clock, Refresh, Sad, Error as ErrorIcon } from "../../Icons";
 import { SpinnerWithBg } from "../../Loading";
+import { useCurrentWallet } from "./useCurrentWallet";
 
 const Transactions = () => {
   const { connection: conn } = useConnection();
@@ -176,7 +176,7 @@ const TxsTop = styled.div`
     display: flex;
     font-size: ${theme.font?.size.small};
     color: ${theme.colors.default.textSecondary};
-    background-color: ${theme.colors.right?.bg};
+    background-color: ${theme.colors.default.bgSecondary};
     font-weight: bold;
 
     &:not(:last-child) {
@@ -200,7 +200,7 @@ const TxWrapper = styled.div`
       color: ${theme.colors.default.textPrimary};
       background: linear-gradient(
         0deg,
-        ${theme.colors.right?.bg} 75%,
+        ${theme.colors.default.bgSecondary} 75%,
         ${theme.colors.default.primary + theme.transparency?.low} 100%
       );
     }

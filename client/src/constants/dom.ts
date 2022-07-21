@@ -1,10 +1,12 @@
 export enum ClassName {
   ERROR = "error",
+  SUCCESS = "success",
   OPEN = "open",
   HIDDEN = "hidden",
   TOUCHED = "touched",
   SELECTED = "selected",
   CTX_SELECTED = "ctx-selected",
+  ACTIVE = "active",
   FILE = "file",
   FOLDER = "folder",
   SIDE_RIGHT = "side-right",

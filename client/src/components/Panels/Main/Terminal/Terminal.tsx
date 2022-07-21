@@ -2,30 +2,31 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtom } from "jotai";
 import styled, { css, useTheme } from "styled-components";
 import { Resizable } from "re-resizable";
-import { Terminal as XTerm } from "xterm";
 import "xterm/css/xterm.css";
-import { FitAddon } from "xterm-addon-fit";
-import { WebLinksAddon } from "xterm-addon-web-links";
 
 import Button from "../../../Button";
 import Progress from "../../../Progress";
+import { useTerminal } from "./useTerminal";
+import { useWasm } from "./useWasm";
 import { Clear, Close, DoubleArrow, Tick } from "../../../Icons";
-import { terminalAtom, terminalProgressAtom } from "../../../../state";
-import { PgCommon, PgTerminal } from "../../../../utils/pg";
+import { terminalOutputAtom, terminalProgressAtom } from "../../../../state";
+import { PgCommon, PgEditor, PgTerm, PgTerminal } from "../../../../utils/pg";
 
 const Terminal = () => {
-  const [terminal] = useAtom(terminalAtom);
+  const [terminalOutput] = useAtom(terminalOutputAtom);
   const [progress] = useAtom(terminalProgressAtom);
 
   const terminalRef = useRef<HTMLDivElement>(null);
 
+  useTerminal();
+
   const theme = useTheme();
 
   // Load xterm
-  const xterm = useMemo(() => {
+  const term = useMemo(() => {
     const state = theme.colors.state;
 
-    return new XTerm({
+    return new PgTerm({
       convertEol: true,
       rendererType: "dom",
       fontSize: 14,
@@ -34,54 +35,82 @@ const Terminal = () => {
         brightRed: state.error.color,
         brightYellow: state.warning.color,
         brightBlue: state.info.color,
+        brightMagenta: theme.colors.default.primary,
       },
     });
   }, [theme]);
 
-  // Load addons
-  const fitAddon = useMemo(() => {
-    const fitAddon = new FitAddon();
-    const webLinksAddon = new WebLinksAddon();
+  // Custom keyboard events
+  // Only runs when terminal is in focus
+  const handleCustomEvent = useCallback(
+    (e: KeyboardEvent) => {
+      if (PgCommon.isKeyCtrlOrCmd(e) && e.type === "keydown") {
+        const key = e.key.toUpperCase();
 
-    xterm.loadAddon(fitAddon);
-    xterm.loadAddon(webLinksAddon);
+        switch (key) {
+          case "C":
+            if (e.shiftKey) {
+              e.preventDefault();
+              const selection = term.getSelection();
+              navigator.clipboard.writeText(selection);
+              return false;
+            }
 
-    return fitAddon;
-  }, [xterm]);
+            return true;
 
+          case "V":
+            // Ctrl+Shift+V does not work with Firefox but works with Chromium.
+            // We fallback to Ctrl+V for Firefox
+            if (e.shiftKey || PgCommon.isFirefox()) return false;
+
+            return true;
+
+          case "L":
+          case "M":
+          case "J":
+            return false;
+        }
+      }
+
+      return true;
+    },
+    [term]
+  );
+
+  // Open and fit terminal
   useEffect(() => {
-    if (xterm && terminalRef.current) {
+    if (term && terminalRef.current) {
       const hasChild = terminalRef.current.hasChildNodes();
       if (hasChild)
         terminalRef.current.removeChild(terminalRef.current.childNodes[0]);
 
-      xterm.open(terminalRef.current);
-      fitAddon.fit();
+      term.open(terminalRef.current);
+      term.fit();
 
-      // Welcome text
-      xterm.writeln(PgTerminal.DEFAULT_TEXT);
-      if (hasChild) xterm.writeln("");
+      term.attachCustomKeyEventHandler(handleCustomEvent);
+
+      // This runs after theme change
+      if (hasChild) term.println("");
     }
-  }, [xterm, fitAddon]);
+  }, [term, handleCustomEvent]);
 
   // New output
   useEffect(() => {
     if (terminalRef.current) {
-      xterm.writeln(PgTerminal.colorText(terminal));
-      xterm.scrollToBottom();
+      term.println(PgTerminal.colorText(terminalOutput));
     }
-  }, [terminal, xterm]);
+  }, [terminalOutput, term]);
 
   // Resize
   const [height, setHeight] = useState(PgTerminal.DEFAULT_HEIGHT);
 
   useEffect(() => {
-    fitAddon.fit();
-  }, [fitAddon, height]);
+    term.fit();
+  }, [term, height]);
 
   const handleResize = useCallback(() => {
-    fitAddon.fit();
-  }, [fitAddon]);
+    term.fit();
+  }, [term]);
 
   // Resize the terminal on window resize event
   useEffect(() => {
@@ -93,34 +122,37 @@ const Terminal = () => {
   useEffect(() => {
     const intervalId = setInterval(() => {
       handleResize();
-    }, 5000);
+    }, 3000);
 
     return () => clearInterval(intervalId);
   }, [handleResize]);
 
   const handleResizeStop = useCallback(
     (_e, _dir, _ref, d) => {
-      setHeight((h) => h + d.height);
+      setHeight((h) => {
+        const result = h + d.height;
+        if (result > PgTerminal.MAX_HEIGHT) return PgTerminal.MAX_HEIGHT;
+        return result;
+      });
     },
     [setHeight]
   );
 
   // Buttons
   const clear = useCallback(() => {
-    xterm.clear();
-  }, [xterm]);
+    term.clear();
+  }, [term]);
 
   const maxButtonRef = useRef<HTMLButtonElement>(null);
 
   const toggleMaximize = useCallback(() => {
     setHeight((h) => {
-      if (h === "100%") {
+      if (h === PgTerminal.MAX_HEIGHT) {
         maxButtonRef.current?.classList.remove("down");
         return PgTerminal.DEFAULT_HEIGHT;
       }
-
       maxButtonRef.current?.classList.add("down");
-      return "100%";
+      return PgTerminal.MAX_HEIGHT;
     });
   }, [setHeight]);
 
@@ -129,35 +161,104 @@ const Terminal = () => {
   const toggleClose = useCallback(() => {
     setIsClosed((c) => !c);
     setHeight((h) => {
-      if (h === "0%") return PgTerminal.DEFAULT_HEIGHT;
-      return "0%";
+      if (h === 0) return PgTerminal.DEFAULT_HEIGHT;
+      return 0;
     });
   }, [setHeight, setIsClosed]);
 
   // Keybinds
   useEffect(() => {
-    const handleKeybinds = (e: globalThis.KeyboardEvent) => {
-      // TODO: Focus terminal
-      if (PgCommon.isKeyctrlOrCmd(e)) {
-        if (e.key === "l") {
-          e.preventDefault();
-          clear();
-        } else if (e.key === "`") {
-          e.preventDefault();
-          toggleClose();
-        } else if (e.key === "j") {
-          e.preventDefault();
-          toggleClose();
-        } else if (e.key === "m") {
-          e.preventDefault();
-          toggleMaximize();
+    const handleKeybinds = (e: KeyboardEvent) => {
+      const key = e.key.toUpperCase();
+      if (PgCommon.isKeyCtrlOrCmd(e)) {
+        switch (key) {
+          case "L":
+            e.preventDefault();
+            clear();
+            break;
+
+          case "`":
+            e.preventDefault();
+            if (PgTerminal.isTerminalFocused()) {
+              toggleClose();
+              PgEditor.focus();
+            } else if (!height) {
+              // Terminal is minimized
+              toggleClose();
+              term.focus();
+            } else term.focus();
+
+            break;
+
+          case "M":
+            e.preventDefault();
+            toggleMaximize();
+            break;
+
+          case "J":
+            e.preventDefault();
+            toggleClose();
+            if (!height) term.focus();
+            else PgEditor.focus();
+
+            break;
         }
       }
     };
 
     document.addEventListener("keydown", handleKeybinds);
     return () => document.removeEventListener("keydown", handleKeybinds);
-  }, [clear, toggleClose, toggleMaximize]);
+  }, [term, height, clear, toggleClose, toggleMaximize]);
+
+  // Set wasm
+  const wasm = useWasm();
+
+  useEffect(() => {
+    if (wasm) term.setWasm(wasm);
+  }, [term, wasm]);
+
+  // Terminal custom events
+  useEffect(() => {
+    const handleEnable = () => {
+      term.enable();
+    };
+
+    const handleDisable = () => {
+      term.disable();
+    };
+
+    const handleRunLastCmd = () => {
+      term.runLastCmd();
+    };
+
+    document.addEventListener(
+      PgTerminal.EVT_NAME_TERMINAL_ENABLE,
+      handleEnable
+    );
+    document.addEventListener(
+      PgTerminal.EVT_NAME_TERMINAL_DISABLE,
+      handleDisable
+    );
+    document.addEventListener(
+      PgTerminal.EVT_NAME_RUN_LAST_CMD,
+      handleRunLastCmd
+    );
+
+    return () => {
+      document.removeEventListener(
+        PgTerminal.EVT_NAME_TERMINAL_ENABLE,
+        handleEnable
+      );
+      document.removeEventListener(
+        PgTerminal.EVT_NAME_TERMINAL_DISABLE,
+        handleDisable
+      );
+      document.removeEventListener(
+        PgTerminal.EVT_NAME_RUN_LAST_CMD,
+        handleRunLastCmd
+      );
+    };
+  }, [term]);
 
   return (
     <Resizable
@@ -232,16 +333,16 @@ const Wrapper = styled.div`
     & ::-webkit-scrollbar-thumb {
       border: 0.25rem solid transparent;
       border-radius: ${theme.borderRadius};
-      background-color: ${theme.colors.scrollbar?.thumb.color};
+      background-color: ${theme.scrollbar?.thumb.color};
     }
 
     & ::-webkit-scrollbar-thumb:hover {
-      background-color: ${theme.colors.scrollbar?.thumb.hoverColor};
+      background-color: ${theme.scrollbar?.thumb.hoverColor};
     }
 
     /* Firefox */
     & * {
-      scrollbar-color: ${theme.colors.scrollbar?.thumb.color};
+      scrollbar-color: ${theme.scrollbar?.thumb.color};
     }
   `}
 `;
@@ -284,12 +385,6 @@ const TerminalWrapper = styled.div`
       font-size: ${theme.font?.size.medium} !important;
       color: ${theme.colors.terminal?.color ??
       theme.colors.default.textPrimary} !important;
-    }
-
-    /* TODO: */
-    & .xterm.xterm-cursor-block,
-    .xterm .xterm-cursor-block {
-      display: none;
     }
   `}
 `;

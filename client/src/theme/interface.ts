@@ -5,15 +5,55 @@ type BgAndColor = {
   color?: string;
 };
 
+export type Font = {
+  family: string;
+  size: {
+    small: string;
+    medium: string;
+    large: string;
+  };
+};
+
+export type Scrollbar = {
+  thumb: {
+    color: string;
+    hoverColor: string;
+  };
+  width?: {
+    editor: string;
+  };
+};
+
+export type Transition = {
+  type: string;
+  duration: {
+    short: string;
+    medium: string;
+    long: string;
+  };
+};
+
+export type Transparency = {
+  low: string;
+  medium: string;
+  high: string;
+};
+
+export type Skeleton = {
+  color: string;
+  highlightColor: string;
+};
+
 export default interface Theme {
   name: string;
   isDark: boolean;
   colors: {
     // Defaults
     default: {
-      bg: string;
       primary: string;
       secondary: string;
+      bgPrimary: string;
+      bgSecondary: string;
       textPrimary: string;
       textSecondary: string;
       borderColor: string;
@@ -32,21 +72,21 @@ export default interface Theme {
       secondary?: boolean;
     };
     // Icon panel
-    left?: BgAndColor;
+    left?: BgAndColor; // bgPrimary, textPrimary
     // Side right panel
     right?: {
-      bg?: string;
-      color?: string;
-      otherBg?: string;
+      bg?: string; // bgSecondary
+      color?: string; // textPrimary
+      otherBg?: string; // bgPrimary
     };
     // Terminal
-    terminal?: BgAndColor;
+    terminal?: BgAndColor; // bgPrimary, textPrimary
     // Editor
     editor?: {
-      bg?: string;
-      text?: BgAndColor;
+      bg?: string; // bgPrimary
+      color?: string; // textPrimary
       cursor?: {
-        color: string;
+        color: string; // textSecondary
       };
       selection?: BgAndColor;
       comment?: BgAndColor;
@@ -75,8 +115,8 @@ export default interface Theme {
       };
     };
     // Bottom bar
-    bottom?: BgAndColor;
-    // IconButton
+    bottom?: BgAndColor; // primary, textPrimary
+    // Left sidebar IconButton
     iconButton?: {
       bg?: string;
       color?: string;
@@ -85,34 +125,20 @@ export default interface Theme {
     };
     tooltip?: BgAndColor;
     toast?: BgAndColor;
-    scrollbar?: {
-      thumb: {
-        color: string;
-        hoverColor: string;
+    home?: {
+      bg?: string; // bgPrimary
+      color?: string; // textPrimary
+      card?: {
+        bg?: string; // bgSecondary
+        color?: string; // textSecondary
       };
     };
   };
-  highlight: HighlightStyle;
   borderRadius?: string;
-  font?: {
-    family: string;
-    size: {
-      small: string;
-      medium: string;
-      large: string;
-    };
-  };
-  transparency?: {
-    low: string;
-    medium: string;
-    high: string;
-  };
-  transition?: {
-    type: string;
-    duration: {
-      short: string;
-      medium: string;
-      long: string;
-    };
-  };
+  font?: Font;
+  transparency?: Transparency;
+  transition?: Transition;
+  scrollbar?: Scrollbar;
+  skeleton?: Skeleton;
+  highlight: HighlightStyle;
 }

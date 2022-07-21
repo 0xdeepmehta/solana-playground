@@ -1,9 +1,9 @@
 import { FC, useCallback, useEffect } from "react";
 import styled, { css } from "styled-components";
 
-import { PROJECT_NAME } from "../../constants";
 import Button from "../Button";
 import useModal from "./useModal";
+import { PROJECT_NAME } from "../../constants";
 
 interface ModalInsideProps {
   title?: boolean | string;
@@ -12,11 +12,13 @@ interface ModalInsideProps {
     onSubmit: () => void;
     disabled?: boolean;
   };
+  closeOnSubmit?: boolean;
 }
 
 const ModalInside: FC<ModalInsideProps> = ({
   title,
   buttonProps,
+  closeOnSubmit = true,
   children,
 }) => {
   const { close } = useModal();
@@ -25,9 +27,10 @@ const ModalInside: FC<ModalInsideProps> = ({
     if (!buttonProps) return;
 
     buttonProps.onSubmit();
-    close();
-  }, [buttonProps, close]);
+    if (closeOnSubmit) close();
+  }, [buttonProps, closeOnSubmit, close]);
 
+  // Submit on Enter
   useEffect(() => {
     const handleEnter = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Enter") handleSubmit();
@@ -62,7 +65,7 @@ const Wrapper = styled.div`
     padding: 0.25rem 1.5rem;
     border: 1px solid ${theme.colors.default.borderColor};
     border-radius: ${theme.borderRadius};
-    background-color: ${theme.colors.right?.bg + "EE"};
+    background-color: ${theme.colors.default.bgSecondary + "EE"};
     max-width: max(40%, 20rem);
   `}
 `;

@@ -1,21 +1,31 @@
-import { createContext, Dispatch, FC, SetStateAction, useState } from "react";
+import {
+  createContext,
+  Dispatch,
+  FC,
+  SetStateAction,
+  useEffect,
+  useState,
+} from "react";
 import { ThemeProvider } from "styled-components";
 
+import THEMES from "./themes";
+import FONTS from "./fonts";
+import Theme, { Font } from "./interface";
 import {
   PG_BORDER_RADIUS,
-  PG_FONT,
   PG_SCROLLBAR,
+  PG_SKELETON,
   PG_TRANSITION,
   PG_TRANSPARENCY,
 } from "./default";
-import Theme from "./interface";
-import THEMES from "./themes";
-import { DRACULA } from "./themes/";
 
 export const THEME_KEY = "theme";
+export const FONT_KEY = "font";
 
 interface MutThemeContextProps {
   setTheme: Dispatch<SetStateAction<Theme>>;
+  font: Font;
+  setFont: Dispatch<SetStateAction<Font>>;
 }
 export const MutThemeContext = createContext<MutThemeContextProps>(
   {} as MutThemeContextProps
@@ -23,39 +33,57 @@ export const MutThemeContext = createContext<MutThemeContextProps>(
 
 const MutThemeProvider: FC = ({ children }) => {
   const themeName = localStorage.getItem(THEME_KEY);
-  const theme = THEMES.find((t) => t.name === themeName) ?? DRACULA;
+  const fontFamily = localStorage.getItem(FONT_KEY);
+  const _theme = THEMES.find((t) => t.name === themeName) ?? THEMES[0];
+  const _font = FONTS.find((f) => f.family === fontFamily) ?? FONTS[0];
 
   // Set defaults
-  if (!theme.font) theme.font = PG_FONT;
-  if (!theme.transparency) theme.transparency = PG_TRANSPARENCY;
-  // Change bg in each item
-  if (!theme.colors.right?.bg)
-    theme.colors.right = {
-      ...theme.colors.right,
-      bg: theme.colors.default.bg,
+  // Right sidebar
+  if (!_theme.colors.right?.bg)
+    _theme.colors.right = {
+      ..._theme.colors.right,
+      bg: _theme.colors.default.bgSecondary,
     };
-  if (!theme.colors.right?.otherBg)
-    theme.colors.right = {
-      ...theme.colors.right,
-      otherBg: theme.colors.default.bg,
+  if (!_theme.colors.right?.otherBg)
+    _theme.colors.right = {
+      ..._theme.colors.right,
+      otherBg: _theme.colors.default.bgPrimary,
     };
-  if (!theme.colors.tooltip)
-    theme.colors.tooltip = {
-      bg: theme.colors.default.bg,
-      color: theme.colors.default.textPrimary,
-    };
-  if (!theme.borderRadius) theme.borderRadius = PG_BORDER_RADIUS;
-  if (!theme.colors.scrollbar) {
-    if (theme.isDark) theme.colors.scrollbar = PG_SCROLLBAR.dark;
-    else theme.colors.scrollbar = PG_SCROLLBAR.light;
-  }
-  if (!theme.transition) theme.transition = PG_TRANSITION;
 
-  const [_theme, setTheme] = useState(theme);
+  // Home
+  if (!_theme.colors.home)
+    _theme.colors.home = {
+      bg: _theme.colors.default.bgPrimary,
+      card: {
+        bg: _theme.colors.default.bgSecondary,
+      },
+    };
+
+  if (!_theme.transparency) _theme.transparency = PG_TRANSPARENCY;
+  if (!_theme.colors.tooltip)
+    _theme.colors.tooltip = {
+      bg: _theme.colors.default.bgPrimary,
+      color: _theme.colors.default.textPrimary,
+    };
+  if (!_theme.borderRadius) _theme.borderRadius = PG_BORDER_RADIUS;
+  if (!_theme.scrollbar) {
+    if (_theme.isDark) _theme.scrollbar = PG_SCROLLBAR.dark;
+    else _theme.scrollbar = PG_SCROLLBAR.light;
+  }
+  if (!_theme.transition) _theme.transition = PG_TRANSITION;
+  if (!_theme.skeleton) _theme.skeleton = PG_SKELETON;
+
+  const [theme, setTheme] = useState(_theme);
+  const [font, setFont] = useState(_font);
+
+  // Update theme.font when theme or font changes
+  useEffect(() => {
+    if (theme && theme.font !== font) setTheme((t) => ({ ...t, font }));
+  }, [theme, font, setTheme]);
 
   return (
-    <MutThemeContext.Provider value={{ setTheme }}>
-      <ThemeProvider theme={_theme}>{children}</ThemeProvider>
+    <MutThemeContext.Provider value={{ setTheme, font, setFont }}>
+      <ThemeProvider theme={theme}>{children}</ThemeProvider>
     </MutThemeContext.Provider>
   );
 };

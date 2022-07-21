@@ -21,22 +21,19 @@ import useCopy from "../../CopyButton/useCopy";
 import Button from "../../Button";
 import DownloadButton from "../../DownloadButton";
 import UploadButton from "../../UploadButton";
-import useConnect from "./useConnect";
-import useCurrentWallet from "./useCurrentWallet";
-import useAirdropAmount from "./useAirdropAmount";
 import { ClassName, Id } from "../../../constants";
 import {
   pgWalletAtom,
   showWalletAtom,
-  terminalAtom,
+  terminalOutputAtom,
   txHashAtom,
 } from "../../../state";
 import { PgCommon, PgTerminal, PgTx, PgWallet } from "../../../utils/pg";
-import { TAB_HEIGHT } from "../Main/Tabs";
-import { EDITOR_SCROLLBAR_WIDTH } from "../Main/Editor";
 import { Close, ThreeDots } from "../../Icons";
+import { EDITOR_SCROLLBAR_WIDTH } from "../Main/Editor";
 import { ICONBAR_WIDTH } from "../Side/Left";
 import { BOTTOM_HEIGHT } from "../Bottom";
+import { useCurrentWallet, useConnect, useAirdropAmount } from "./";
 
 const Wallet = () => {
   const [showWallet] = useAtom(showWalletAtom);
@@ -143,7 +140,7 @@ interface SettingsItemProps {
 }
 
 const Airdrop: FC<SettingsItemProps> = ({ close }) => {
-  const [, setTerminal] = useAtom(terminalAtom);
+  const [, setTerminal] = useAtom(terminalOutputAtom);
   const [, setTxHash] = useAtom(txHashAtom);
 
   // Get cap amount for airdrop based on network
@@ -156,6 +153,7 @@ const Airdrop: FC<SettingsItemProps> = ({ close }) => {
       if (!amount) return;
 
       close();
+      PgTerminal.disable();
 
       let msg = "";
 
@@ -163,29 +161,38 @@ const Airdrop: FC<SettingsItemProps> = ({ close }) => {
         msg = PgTerminal.info("Sending an airdrop request...");
         setTerminal(msg);
 
+        // Airdrop tx is sometimes successful even when balance hasn't changed
+        // Instead of confirming the tx, we will check before and after balance
+        const beforeBalance = await conn.getBalance(walletPk, "processed");
+
         const txHash = await conn.requestAirdrop(
           walletPk,
           PgCommon.solToLamports(amount)
         );
-
         setTxHash(txHash);
 
-        const txResult = await PgTx.confirm(txHash, conn);
+        // Allow enough time for balance to update by waiting for confirmation
+        await PgTx.confirm(txHash, conn);
 
-        if (txResult?.err)
-          msg = `${PgTerminal.CROSS}  ${PgTerminal.error(
-            "Error receiving airdrop."
-          )}`;
-        else
+        const afterBalance = await conn.getBalance(walletPk, "processed");
+
+        if (afterBalance > beforeBalance)
           msg = `${PgTerminal.CHECKMARK}  ${PgTerminal.success(
             "Success."
           )} Received ${PgTerminal.bold(amount.toString())} SOL.`;
+        else
+          msg = `${PgTerminal.CROSS}  ${PgTerminal.error(
+            "Error receiving airdrop."
+          )}`;
       } catch (e: any) {
+        const convertedError = PgTerminal.convertErrorMessage(e.message);
+
         msg = `${PgTerminal.CROSS}  ${PgTerminal.error(
           "Error receiving airdrop:"
-        )} ${e.message}`;
+        )} ${convertedError}`;
       } finally {
         setTerminal(msg + "\n");
+        PgTerminal.enable();
       }
     },
     [conn, amount, setTerminal, setTxHash, close]
@@ -199,8 +206,8 @@ const Airdrop: FC<SettingsItemProps> = ({ close }) => {
     if (solWalletPk) await airdrop(solWalletPk);
   }, [solWalletPk, airdrop]);
 
-  const pgCond = conn && pgWalletPk && amount;
-  const solCond = conn && solWalletPk && amount;
+  const pgCond = pgWalletPk && conn && amount;
+  const solCond = solWalletPk && conn && amount;
 
   return (
     <>
@@ -296,6 +303,7 @@ const WalletClose = () => {
 };
 
 const WALLET_WIDTH = 320;
+const TAB_HEIGHT = "2rem";
 
 const WalletBound = styled.div`
   position: absolute;
@@ -315,7 +323,7 @@ const WalletWrapper = styled.div`
   ${({ theme }) => css`
     width: 100%;
     height: 100%;
-    background-color: ${theme.colors.right?.bg};
+    background-color: ${theme.colors?.right?.bg};
     border: 1px solid ${theme.colors.default.borderColor};
     border-radius: ${theme.borderRadius};
     z-index: 2;
@@ -352,7 +360,7 @@ const SettingsList = styled.div`
     position: absolute;
     left: 0;
     top: 1.75rem;
-    background-color: ${theme.colors.right?.bg};
+    background-color: ${theme.colors?.right?.bg};
     font-size: ${theme.font?.size.small};
     border: 1px solid ${theme.colors.default.borderColor};
     border-radius: ${theme.borderRadius};
@@ -389,7 +397,7 @@ const Main = styled.div`
   ${({ theme }) => css`
     background: linear-gradient(
       0deg,
-      ${theme.colors.right?.bg} 75%,
+      ${theme.colors?.right?.bg} 75%,
       ${theme.colors.default.primary + theme.transparency?.low} 100%
     );
     padding: 1rem;
@@ -409,7 +417,7 @@ const Main = styled.div`
         ${theme.transition?.type};
     }
 
-    &.darken::after {
+    &.${ClassName.DARKEN}::after {
       opacity: 0.5;
       z-index: 1;
     }

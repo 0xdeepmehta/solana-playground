@@ -12,6 +12,7 @@
   - [borsh](https://docs.rs/borsh/0.9.3/borsh/)
   - [borsh-derive](https://docs.rs/borsh-derive/0.9.3/borsh_derive/)
   - [bytemuck](https://docs.rs/bytemuck/1.9.1/bytemuck/)
+  - [mpl-auction-house](https://docs.rs/mpl-auction-house/1.1.6/mpl_auction_house/)
   - [mpl-token-metadata](https://docs.rs/mpl-token-metadata/1.2.7/mpl_token_metadata/)
   - [num-derive](https://docs.rs/num-derive/0.3.3/num_derive/)
   - [num-traits](https://docs.rs/num-traits/0.2.14/num_traits/)
@@ -28,4 +29,5 @@ Anyone is welcome to contribute to **Solana Playground** no matter how big or sm
 
 ## License
 
-SolPg is licensed under [GPL 3.0](https://github.com/solpg/solpg/blob/master/LICENSE).
+`client` is licensed under [GPL-3.0](https://github.com/solana-playground/solana-playground/blob/master/LICENSE-GPL).
+`wasm` packages are licensed under [Apache-2.0](https://github.com/solana-playground/solana-playground/blob/master/LICENSE-APACHE) unless specified otherwise in their respective `Cargo.toml`.

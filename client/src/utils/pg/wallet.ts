@@ -1,5 +1,7 @@
 import { Keypair, PublicKey, Transaction } from "@solana/web3.js";
 
+import { PgTerminal } from "./terminal/";
+
 const DEFAULT_LS_WALLET: LsWallet = {
   setupCompleted: false,
   connected: false,
@@ -38,11 +40,13 @@ export class PgWallet {
     this.connected = lsWallet.connected;
   }
 
+  // For compatibility with AnchorWallet
   async signTransaction(tx: Transaction) {
     tx.partialSign(this._kp);
     return tx;
   }
 
+  // For compatibility with AnchorWallet
   async signAllTransactions(txs: Transaction[]) {
     for (const tx of txs) {
       tx.partialSign(this._kp);
@@ -52,8 +56,15 @@ export class PgWallet {
   }
 
   // Statics
-  private static WALLET_KEY = "wallet";
+  private static readonly WALLET_KEY = "wallet";
 
+  static get keypairBytes() {
+    return Uint8Array.from(this.getKp().secretKey);
+  }
+
+  /**
+   * @returns wallet info from localStorage
+   */
   static getLs() {
     const lsWalletStr = localStorage.getItem(this.WALLET_KEY);
     if (!lsWalletStr) return null;
@@ -62,6 +73,9 @@ export class PgWallet {
     return lsWallet;
   }
 
+  /**
+   * Update localStorage wallet
+   */
   static update(updateParams: UpdateLsParams) {
     const lsWallet = this.getLs() ?? DEFAULT_LS_WALLET;
 
@@ -74,7 +88,30 @@ export class PgWallet {
     localStorage.setItem(this.WALLET_KEY, JSON.stringify(lsWallet));
   }
 
+  /**
+   * @returns wallet keypair from localStorage
+   */
   static getKp() {
     return Keypair.fromSecretKey(new Uint8Array(this.getLs()!.sk));
+  }
+
+  /**
+   * Checks if pg wallet is connected and
+   * logs instructions in terminal if wallet is not connected
+   * @returns pg wallet connection status
+   */
+  static checkIsPgConnected() {
+    if (this.getLs()?.connected) return true;
+
+    PgTerminal.logWasm(
+      `${PgTerminal.bold(
+        "Playground Wallet"
+      )} must be connected to run this command. Run ${PgTerminal.bold(
+        "connect"
+      )} to connect.`
+    );
+    PgTerminal.enable();
+
+    return false;
   }
 }

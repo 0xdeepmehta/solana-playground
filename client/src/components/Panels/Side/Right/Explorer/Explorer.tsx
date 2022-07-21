@@ -5,6 +5,7 @@ import Buttons from "./Buttons";
 import Folders from "./Folders";
 import useExplorerContextMenu from "./useExplorerContextMenu";
 import useNewItem from "./useNewItem";
+import { ClassName } from "../../../../../constants";
 
 const Explorer = () => {
   const { newItem } = useNewItem();
@@ -13,7 +14,7 @@ const Explorer = () => {
   // Explorer keybinds
   useEffect(() => {
     const handleKey = (e: globalThis.KeyboardEvent) => {
-      if (e.altKey && e.key === "n") newItem();
+      if (e.altKey && e.key.toUpperCase() === "N") newItem();
       else if (e.key === "F2") renameItem();
       else if (e.key === "Delete") deleteItem();
     };
@@ -37,19 +38,18 @@ const ExplorerWrapper = styled.div`
     width: 100%;
     user-select: none;
 
-    & .folder,
-    & .file {
+    & .${ClassName.FOLDER}, & .${ClassName.FILE} {
       display: flex;
       padding: 0.25rem 0;
       cursor: pointer;
       border: 1px solid transparent;
 
-      &.selected {
+      &.${ClassName.SELECTED} {
         background-color: ${theme.colors.default.primary +
         theme.transparency?.low};
       }
 
-      &.ctx-selected {
+      &.${ClassName.CTX_SELECTED} {
         background-color: ${theme.colors.default.primary +
         theme.transparency?.medium};
         border-color: ${theme.colors.default.primary};

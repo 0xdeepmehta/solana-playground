@@ -1,7 +1,7 @@
 import { ComponentPropsWithoutRef, forwardRef } from "react";
 import styled, { css, DefaultTheme } from "styled-components";
 
-import { spinnerAnimation } from "../Loading/Spinner";
+import { spinnerAnimation } from "../Loading";
 
 export type ButtonKind =
   | "primary"
@@ -41,7 +41,7 @@ const StyledButton = styled.button<ButtonProps>`
 
 const getButtonStyles = ({
   theme,
-  kind,
+  kind = "transparent",
   size,
   fullWidth,
 }: ButtonProps & { theme: DefaultTheme }) => {
@@ -49,7 +49,7 @@ const getButtonStyles = ({
   let bgColor = "transparent";
   let borderColor = "transparent";
 
-  let hoverBgColor = theme.colors.default.primary;
+  let hoverBgColor = "transparent";
   let hoverColor = "inherit";
   let hoverBorderColor = "transparent";
 
@@ -60,7 +60,7 @@ const getButtonStyles = ({
     case "primary": {
       if (theme.colors.contrast?.primary) color = theme.colors.contrast.color;
       bgColor = theme.colors.default.primary;
-      hoverBgColor += "E0";
+      hoverBgColor = theme.colors.default.primary + "E0";
       padding = "0.5rem 1.25rem";
       break;
     }
@@ -73,7 +73,7 @@ const getButtonStyles = ({
     }
     case "primary-transparent": {
       bgColor = theme.colors.default.primary + theme.transparency?.medium;
-      hoverBgColor += theme.transparency?.high;
+      hoverBgColor = theme.colors.default.primary + theme.transparency?.high;
       padding = "0.5rem 1.25rem";
       break;
     }
@@ -85,7 +85,7 @@ const getButtonStyles = ({
     }
     case "primary-outline": {
       borderColor = theme.colors.default.primary;
-      hoverBgColor += "E0";
+      hoverBgColor = theme.colors.default.primary + "E0";
       break;
     }
     case "secondary-outline": {
@@ -95,20 +95,18 @@ const getButtonStyles = ({
     }
     case "outline": {
       borderColor = theme.colors.default.borderColor;
-      hoverBgColor = theme.colors.right?.otherBg ?? "transparent";
+      hoverBgColor = theme.colors.state.hover.bg ?? "transparent";
       hoverBorderColor = theme.colors.default.borderColor;
       break;
     }
     case "icon": {
       padding = "0.25rem";
       color = theme.colors.default.textSecondary;
-      hoverBgColor = "transparent";
       break;
     }
-    // Transparent
-    default: {
-      hoverBgColor = "transparent";
+    case "transparent": {
       hoverBorderColor = theme.colors.default.borderColor;
+      break;
     }
   }
 
@@ -172,7 +170,7 @@ const getButtonStyles = ({
       width: 100%;
     `);
 
-  if (kind === "icon")
+  if (kind === "icon") {
     defaultCss = defaultCss.concat(css`
       display: flex;
       justify-content: center;
@@ -189,6 +187,7 @@ const getButtonStyles = ({
         background-color: ${theme.colors.state.hover.bg};
       }
     `);
+  }
 
   return defaultCss;
 };

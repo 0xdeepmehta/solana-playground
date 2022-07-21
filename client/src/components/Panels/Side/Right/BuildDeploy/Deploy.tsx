@@ -1,99 +1,63 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAtom } from "jotai";
-import { useConnection } from "@solana/wallet-adapter-react";
 import styled from "styled-components";
 
 import Button, { ButtonProps } from "../../../../Button";
 import Text from "../../../../Text";
-import useAuthority from "./useAuthority";
-import useConnect from "../../../Wallet/useConnect";
-import useCurrentWallet from "../../../Wallet/useCurrentWallet";
 import useInitialLoading from "../../useInitialLoading";
-import useIsDeployed from "./useIsDeployed";
 import {
-  terminalAtom,
-  pgWalletAtom,
-  refreshPgWalletAtom,
-  terminalProgressAtom,
-  txHashAtom,
   programAtom,
+  TerminalAction,
+  terminalStateAtom,
 } from "../../../../../state";
-import {
-  PgCommon,
-  PgDeploy,
-  PgProgramInfo,
-  PgTerminal,
-} from "../../../../../utils/pg";
-import { Wormhole } from "../../../../Loading";
+import { PgProgramInfo } from "../../../../../utils/pg";
 import { ConnectionErrorText } from "../../Common";
+import { Skeleton } from "../../../../Loading";
+import { useDeploy, useAuthority, useIsDeployed } from "./";
+import {
+  useConnect,
+  useCurrentWallet,
+  useConnectOrSetupPg,
+} from "../../../Wallet";
 
 // TODO: Cancel deployment
-
 const Deploy = () => {
-  const [pgWallet] = useAtom(pgWalletAtom);
-  const [pgWalletChanged] = useAtom(refreshPgWalletAtom);
-  const [, setTerminal] = useAtom(terminalAtom);
-  const [, setProgress] = useAtom(terminalProgressAtom);
-  const [, setTxHash] = useAtom(txHashAtom);
+  const [terminalState, setTerminalState] = useAtom(terminalStateAtom);
   const [program] = useAtom(programAtom);
+
+  const [loading, setLoading] = useState(false);
 
   const { initialLoading } = useInitialLoading();
   const { deployed, setDeployed, connError } = useIsDeployed();
   const { hasAuthority, upgradeable } = useAuthority();
-
-  const { connection: conn } = useConnection();
   const { solWalletPk } = useCurrentWallet();
-
-  const [loading, setLoading] = useState(false);
+  const { runDeploy, pgWallet } = useDeploy(program);
 
   const deploy = useCallback(async () => {
-    if (!pgWallet.connected) return;
+    const deployErrror = await runDeploy();
+    if (!deployErrror) setDeployed(true);
+  }, [runDeploy, setDeployed]);
 
-    setLoading(true);
-    setTerminal(
-      `${PgTerminal.info(
-        "Deploying..."
-      )} This could take a while depending on the program size and network conditions.`
-    );
-    setProgress(0.1);
+  // Set global mount state
+  useEffect(() => {
+    setTerminalState(TerminalAction.deployMount);
+    return () => setTerminalState(TerminalAction.deployUnmount);
+  }, [setTerminalState]);
 
-    let msg = "";
-
-    try {
-      const startTime = performance.now();
-      const txHash = await PgDeploy.deploy(
-        conn,
-        pgWallet,
-        setProgress,
-        program.buffer
-      );
-      const timePassed = (performance.now() - startTime) / 1000;
-      setTxHash(txHash);
-
-      msg = `${PgTerminal.success(
-        "Deployment successful."
-      )} Completed in ${PgCommon.secondsToTime(timePassed)}.`;
-
-      setDeployed(true);
-    } catch (e: any) {
-      const convertedError = PgTerminal.convertErrorMessage(e.message);
-      msg = `${PgTerminal.error("Deployment error:")} ${convertedError}`;
-    } finally {
-      setLoading(false);
-      setTerminal(msg + "\n");
-      setProgress(0);
+  // Run build from terminal
+  useEffect(() => {
+    if (terminalState.deployMounted && terminalState.deployStart) {
+      deploy();
     }
+  }, [terminalState, deploy]);
 
-    //eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    conn,
-    pgWalletChanged,
-    program,
-    setLoading,
-    setDeployed,
-    setTerminal,
-    setTxHash,
-  ]);
+  // Loading state for if the command started when the component wasn't mounted
+  useEffect(() => {
+    if (terminalState.deployMounted) {
+      if (terminalState.deployLoading) setLoading(true);
+      else setLoading(false);
+    }
+  }, [terminalState, setLoading]);
 
   const pgProgramInfo = PgProgramInfo.getProgramInfo();
   const hasProgramKp = pgProgramInfo.kp;
@@ -188,7 +152,7 @@ const Deploy = () => {
   if (initialLoading)
     return (
       <Wrapper>
-        <Wormhole />
+        <Skeleton />
       </Wrapper>
     );
 
@@ -263,7 +227,8 @@ const Deploy = () => {
 };
 
 const ConnectPgWalletButton = () => {
-  const { pgButtonStatus, handleConnectPg } = useConnect();
+  const { pgButtonStatus } = useConnect();
+  const { handleConnectPg } = useConnectOrSetupPg();
 
   return (
     <Button onClick={handleConnectPg} kind="primary">

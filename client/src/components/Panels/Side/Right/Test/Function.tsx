@@ -1,31 +1,25 @@
 import { createContext, FC, useCallback, useEffect, useState } from "react";
 import { useAtom } from "jotai";
-import { Idl, BN } from "@project-serum/anchor";
-import { PublicKey, Signer } from "@solana/web3.js";
+import { Idl } from "@project-serum/anchor";
 import { IdlAccount, IdlInstruction } from "@project-serum/anchor/dist/cjs/idl";
 import { useConnection } from "@solana/wallet-adapter-react";
 import styled, { css } from "styled-components";
 
-import Button from "../../../../Button";
-import Foldable from "../../../../Foldable";
 import Account from "./Account";
 import Arg from "./Arg";
-import useCurrentWallet from "../../../Wallet/useCurrentWallet";
+import Button from "../../../../Button";
+import Foldable from "../../../../Foldable";
 import { updateTxValsProps } from "./useUpdateTxVals";
 import { ClassName } from "../../../../../constants";
-import { terminalAtom, txHashAtom } from "../../../../../state";
-import { PgCommon, PgTerminal, PgTest, PgTx } from "../../../../../utils/pg";
-
-type KV = {
-  [key: string]: string | number | BN | PublicKey | Signer;
-};
-
-export interface TxVals {
-  name: string;
-  additionalSigners: KV;
-  accs?: KV;
-  args?: KV;
-}
+import { terminalOutputAtom, txHashAtom } from "../../../../../state";
+import {
+  PgCommon,
+  PgTerminal,
+  PgTest,
+  PgTx,
+  TxVals,
+} from "../../../../../utils/pg";
+import { useCurrentWallet } from "../../../Wallet";
 
 interface FnContextProps {
   updateTxVals: (props: updateTxValsProps) => void;
@@ -51,7 +45,7 @@ interface FunctionInsideProps {
 }
 
 const FunctionInside: FC<FunctionInsideProps> = ({ ixs, idl }) => {
-  const [, setTerminal] = useAtom(terminalAtom);
+  const [, setTerminal] = useAtom(terminalOutputAtom);
   const [, setTxHash] = useAtom(txHashAtom);
 
   const { connection: conn } = useConnection();
@@ -59,7 +53,7 @@ const FunctionInside: FC<FunctionInsideProps> = ({ ixs, idl }) => {
   // State
   const [txVals, setTxVals] = useState<TxVals>({
     name: ixs.name,
-    additionalSigners: [],
+    additionalSigners: {},
   });
   const [errors, setErrors] = useState<{ [key: string]: number }>({});
   const [loading, setLoading] = useState(false);
@@ -152,8 +146,11 @@ const FunctionInside: FC<FunctionInsideProps> = ({ ixs, idl }) => {
   const handleTest = useCallback(async () => {
     if (!currentWallet) return;
 
+    PgTerminal.disable();
+
     setLoading(true);
 
+    setTerminal(PgTerminal.info(`Testing '${ixs.name}'...`));
     let msg = "";
 
     try {
@@ -179,6 +176,7 @@ const FunctionInside: FC<FunctionInsideProps> = ({ ixs, idl }) => {
     } finally {
       setTerminal(msg + "\n");
       setLoading(false);
+      PgTerminal.enable();
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -195,11 +193,11 @@ const FunctionInside: FC<FunctionInsideProps> = ({ ixs, idl }) => {
           {ixs.args.length ? (
             <ArgsWrapper>
               <Foldable ClickEl={<ArgsText>Args:</ArgsText>} open>
-                {ixs.args.map((a, j) => (
+                {ixs.args.map((a, i) => (
                   <Arg
-                    key={j}
+                    key={i}
                     name={a.name}
-                    type={PgTest.getFullType(a.type, idl.types!)}
+                    type={PgTest.getFullType(a.type, idl.types, idl.accounts)}
                     functionName={ixs.name}
                   />
                 ))}
@@ -208,9 +206,9 @@ const FunctionInside: FC<FunctionInsideProps> = ({ ixs, idl }) => {
           ) : null}
           <AccountsWrapper>
             <Foldable ClickEl={<AccountsText>Accounts:</AccountsText>} open>
-              {ixs.accounts.map((a, j) => (
+              {ixs.accounts.map((a, i) => (
                 <Account
-                  key={j}
+                  key={i}
                   account={a as IdlAccount}
                   functionName={ixs.name}
                 />

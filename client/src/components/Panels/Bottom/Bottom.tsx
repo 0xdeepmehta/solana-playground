@@ -6,19 +6,29 @@ import styled, { css } from "styled-components";
 import Button from "../../Button";
 import Link from "../../Link";
 import Tooltip from "../../Tooltip";
-import useConnect from "../Wallet/useConnect";
-import useCurrentWallet from "../Wallet/useCurrentWallet";
-import useAirdropAmount from "../Wallet/useAirdropAmount";
-import { ConnState } from "../Wallet/connection-states";
-import { EXPLORER_URL, Id, NETWORKS } from "../../../constants";
+import {
+  EXPLORER_URL,
+  Id,
+  NETWORKS,
+  CUSTOM_NETWORK_NAME,
+  ClassName,
+} from "../../../constants";
 import { PgCommon } from "../../../utils/pg";
 import { balanceAtom } from "../../../state";
+import {
+  useAirdropAmount,
+  useConnect,
+  useCurrentWallet,
+  useConnectOrSetupPg,
+  ConnState,
+} from "../Wallet";
 
 const Bottom = () => {
   const [balance, setBalance] = useAtom(balanceAtom);
 
   const { connection: conn } = useConnection();
-  const { connStatus, handleConnectPg } = useConnect();
+  const { connStatus } = useConnect();
+  const { handleConnectPg } = useConnectOrSetupPg();
   const { walletPkStr, currentWallet, pgWalletPk } = useCurrentWallet();
 
   useEffect(() => {
@@ -79,7 +89,8 @@ const Bottom = () => {
 
   const [networkName, cluster] = useMemo(() => {
     return [
-      NETWORKS.filter((n) => n.endpoint === conn.rpcEndpoint)[0].name,
+      NETWORKS.filter((n) => n.endpoint === conn.rpcEndpoint)[0]?.name ??
+        CUSTOM_NETWORK_NAME,
       PgCommon.getExplorerCluster(conn.rpcEndpoint),
     ];
   }, [conn]);
@@ -133,7 +144,7 @@ const Wrapper = styled.div`
     theme.colors.default.primary};
     color: ${theme.colors.bottom?.color ?? "inherit"};
 
-    & .tooltip {
+    & .${ClassName.TOOLTIP} {
       height: 100%;
       display: flex;
       align-items: center;

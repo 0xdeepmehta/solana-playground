@@ -1,23 +1,39 @@
+import { useCallback, useEffect } from "react";
 import { useAtom } from "jotai";
-import { useCallback } from "react";
 import styled, { css } from "styled-components";
 
 import Tab from "./Tab";
 import Button from "../../../Button";
-import useCurrentWallet from "../../Wallet/useCurrentWallet";
 import { Id } from "../../../../constants";
 import {
   explorerAtom,
   refreshExplorerAtom,
   showWalletAtom,
 } from "../../../../state";
+import { useCurrentWallet } from "../../Wallet";
 
 const Tabs = () => {
   const [explorer] = useAtom(explorerAtom);
-  useAtom(refreshExplorerAtom);
+  const [, refresh] = useAtom(refreshExplorerAtom);
 
   // No need memoization
   const tabs = explorer?.getTabs();
+
+  // Close current tab with keybind
+  useEffect(() => {
+    const handleKey = (e: globalThis.KeyboardEvent) => {
+      if (explorer && e.altKey && e.key.toUpperCase() === "W") {
+        const currentPath = explorer.getCurrentFile()?.path;
+        if (!currentPath) return;
+
+        explorer.removeFromTabs(currentPath);
+        refresh();
+      }
+    };
+
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [explorer, refresh]);
 
   return (
     <Wrapper id={Id.TABS}>
@@ -87,16 +103,16 @@ const TabsWrapper = styled.div`
     &::-webkit-scrollbar-thumb {
       border: 0.25rem solid transparent;
       border-radius: ${theme.borderRadius};
-      background-color: ${theme.colors.scrollbar?.thumb.color};
+      background-color: ${theme.scrollbar?.thumb.color};
     }
 
     &::-webkit-scrollbar-thumb:hover {
-      background-color: ${theme.colors.scrollbar?.thumb.hoverColor};
+      background-color: ${theme.scrollbar?.thumb.hoverColor};
     }
 
     /* Firefox */
     & * {
-      scrollbar-color: ${theme.colors.scrollbar?.thumb.color};
+      scrollbar-color: ${theme.scrollbar?.thumb.color};
     }
   `}
 `;
@@ -107,7 +123,7 @@ const WalletWrapper = styled.div`
     align-items: center;
 
     & > button {
-      background-color: ${theme.colors.default.bg};
+      background-color: ${theme.colors.default.bgPrimary};
       border-top-left-radius: ${theme.borderRadius};
       border-bottom-left-radius: ${theme.borderRadius};
       border-top-right-radius: 0;

@@ -76,9 +76,9 @@ const Right: FC<RightProps> = ({ sidebarState, width, setWidth }) => {
   useEffect(() => {
     const handleResize = () => {
       const windowHeight =
-        document.getElementById(Id.ROOT)?.getClientRects()[0].height ?? 979;
+        document.getElementById(Id.ROOT)?.getClientRects()[0]?.height ?? 979;
       const bottomHeight =
-        document.getElementById(Id.BOTTOM)?.getClientRects()[0].height ?? 24;
+        document.getElementById(Id.BOTTOM)?.getClientRects()[0]?.height ?? 24;
 
       setHeight({ window: windowHeight, bottom: bottomHeight });
     };
@@ -154,7 +154,7 @@ const Title: FC<TitleProps> = ({ sidebarState, className }) => (
   </div>
 );
 
-export const RightLoading = () => (
+const RightLoading = () => (
   <LoadingWrapper>
     <Wormhole />
   </LoadingWrapper>
@@ -170,13 +170,14 @@ const Wrapper = styled.div<{ windowHeight?: number; bottomHeight?: number }>`
       ? windowHeight - bottomHeight
       : 955}px;
     overflow-y: auto;
-    background-color: ${theme.colors?.right?.bg ?? "inherit"};
+    background-color: ${theme.colors?.right?.bg};
     border-right: 1px solid ${theme.colors.default.borderColor};
 
     /* Scrollbar */
     /* Chromium */
     &::-webkit-scrollbar {
       width: 0.5rem;
+      height: 0.5rem;
     }
 
     &::-webkit-scrollbar-track {
@@ -186,30 +187,32 @@ const Wrapper = styled.div<{ windowHeight?: number; bottomHeight?: number }>`
     &::-webkit-scrollbar-thumb {
       border: 0.25rem solid transparent;
       border-radius: ${theme.borderRadius};
-      background-color: ${theme.colors.scrollbar?.thumb.color};
+      background-color: ${theme.scrollbar?.thumb.color};
     }
 
     &::-webkit-scrollbar-thumb:hover {
-      background-color: ${theme.colors.scrollbar?.thumb.hoverColor};
+      background-color: ${theme.scrollbar?.thumb.hoverColor};
     }
 
     /* Firefox */
     & * {
-      scrollbar-color: ${theme.colors.scrollbar?.thumb.color};
+      scrollbar-color: ${theme.scrollbar?.thumb.color};
     }
   `}
 `;
 
 const StyledTitle = styled(Title)`
-  min-height: ${TAB_HEIGHT};
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border-bottom: 1px solid ${({ theme }) => theme.colors.default.borderColor};
-  color: ${({ theme }) => theme.colors.default.textSecondary};
+  ${({ theme }) => css`
+    min-height: ${TAB_HEIGHT};
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-bottom: 1px solid ${theme.colors.default.borderColor};
+    color: ${theme.colors.default.textSecondary};
+  `}
 `;
 
-export const LoadingWrapper = styled.div`
+const LoadingWrapper = styled.div`
   margin-top: 2rem;
 `;
 

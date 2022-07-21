@@ -13,7 +13,7 @@ import {
   explorerAtom,
   refreshExplorerAtom,
 } from "../../../../state";
-import { PgExplorer, PgProgramInfo } from "../../../../utils/pg";
+import { PgExplorer, PgProgramInfo, PgEditor } from "../../../../utils/pg";
 
 const Editor = () => {
   const [explorer] = useAtom(explorerAtom);
@@ -34,6 +34,9 @@ const Editor = () => {
         // Editor
         "&": {
           height: "100%",
+          backgroundColor:
+            theme.colors.editor?.bg ?? theme.colors.default.bgPrimary,
+          color: theme.colors.editor?.color ?? theme.colors.default.textPrimary,
         },
         // Cursor
         "& .cm-cursor": {
@@ -45,12 +48,16 @@ const Editor = () => {
         // Gutters
         "& .cm-gutters": {
           backgroundColor: theme.colors.editor?.gutter?.bg ?? "inherit",
-          color: theme.colors.editor?.gutter?.color ?? "inherit",
+          color:
+            theme.colors.editor?.gutter?.color ??
+            theme.colors.default.textSecondary,
           borderRight: "none",
         },
         "& .cm-activeLineGutter": {
           backgroundColor: theme.colors.editor?.gutter?.activeBg ?? "inherit",
-          color: theme.colors.editor?.gutter?.activeColor ?? "inherit",
+          color:
+            theme.colors.editor?.gutter?.activeColor ??
+            theme.colors.default.textPrimary,
         },
         "& .cm-gutterElement:nth-child(1)": {
           padding: "0.125rem",
@@ -85,7 +92,7 @@ const Editor = () => {
         // Tooltip
         ".cm-tooltip": {
           backgroundColor:
-            theme.colors.editor?.tooltip?.bg ?? theme.colors.default.bg,
+            theme.colors.editor?.tooltip?.bg ?? theme.colors.default.bgPrimary,
           color: theme.colors.default.textPrimary,
           border: "1px solid " + theme.colors.default.borderColor,
         },
@@ -97,7 +104,7 @@ const Editor = () => {
         },
         // Panels
         ".cm-panels": {
-          backgroundColor: theme.colors?.right?.bg ?? "inherit",
+          backgroundColor: theme.colors.default.bgSecondary ?? "inherit",
           color: theme.colors.default.textPrimary,
           width: "fit-content",
           height: "fit-content",
@@ -121,7 +128,7 @@ const Editor = () => {
         },
         // Search popup
         ".cm-panel.cm-search": {
-          backgroundColor: theme.colors?.right?.bg ?? "inherit",
+          backgroundColor: theme.colors.default.bgSecondary ?? "inherit",
 
           "& input, & button, & label": {
             margin: ".2em .6em .2em 0",
@@ -151,7 +158,7 @@ const Editor = () => {
 
             "&:hover": {
               cursor: "pointer",
-              backgroundColor: theme.colors.default.bg,
+              backgroundColor: theme.colors.default.bgPrimary,
             },
           },
         },
@@ -243,7 +250,7 @@ const Editor = () => {
     );
 
     //eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, explorerChanged, setNoOpenTabs]);
+  }, [editor, explorer, explorerChanged, setNoOpenTabs]);
 
   // Change programId
   useEffect(() => {
@@ -276,6 +283,17 @@ const Editor = () => {
     //eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildCount, editor]);
 
+  // Listen for custom events
+  useEffect(() => {
+    const handleFocus = () => {
+      if (editor && !editor.hasFocus) editor.focus();
+    };
+
+    document.addEventListener(PgEditor.EVT_NAME_EDITOR_FOCUS, handleFocus);
+    return () =>
+      document.removeEventListener(PgEditor.EVT_NAME_EDITOR_FOCUS, handleFocus);
+  }, [editor]);
+
   if (!explorer)
     return (
       <LoadingWrapper>
@@ -292,8 +310,7 @@ const Wrapper = styled.div`
   ${({ theme }) => css`
     flex: 1;
     overflow: auto;
-    background-color: ${theme.colors?.editor?.bg};
-    color: ${theme.colors?.editor?.text?.color};
+    background-color: ${({ theme }) => theme.colors.home?.bg};
 
     /* Scrollbar */
     /* Chromium */
@@ -311,12 +328,16 @@ const Wrapper = styled.div`
     &::-webkit-scrollbar-thumb,
     & ::-webkit-scrollbar-thumb {
       border: 0.25rem solid transparent;
-      background-color: ${theme.colors.scrollbar?.thumb.color};
+      background-color: ${theme.scrollbar?.thumb.color};
     }
 
     &::-webkit-scrollbar-thumb:hover,
     & ::-webkit-scrollbar-thumb:hover {
-      background-color: ${theme.colors.scrollbar?.thumb.hoverColor};
+      background-color: ${theme.scrollbar?.thumb.hoverColor};
+    }
+
+    & ::-webkit-scrollbar-corner {
+      background-color: ${theme.colors.right?.bg};
     }
   `}
 `;

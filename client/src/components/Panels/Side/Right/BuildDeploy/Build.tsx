@@ -1,51 +1,44 @@
-import { useCallback, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAtom } from "jotai";
 import styled from "styled-components";
 
-import {
-  buildCountAtom,
-  explorerAtom,
-  terminalAtom,
-} from "../../../../../state";
 import Button from "../../../../Button";
-import { PgBuild, PgTerminal } from "../../../../../utils/pg";
+import { useBuild } from "./";
+import { TerminalAction, terminalStateAtom } from "../../../../../state";
 
 const Build = () => {
-  const [explorer] = useAtom(explorerAtom);
-  const [, setTerminal] = useAtom(terminalAtom);
-  const [, setBuildCount] = useAtom(buildCountAtom);
+  const [terminalState, setTerminalState] = useAtom(terminalStateAtom);
 
   const [loading, setLoading] = useState(false);
 
-  const build = useCallback(async () => {
-    if (!explorer) return;
+  const { runBuild } = useBuild();
 
-    setLoading(true);
+  // Set global mount state
+  useEffect(() => {
+    setTerminalState(TerminalAction.buildMount);
+    return () => setTerminalState(TerminalAction.buildUnmount);
+  }, [setTerminalState]);
 
-    let msg = PgTerminal.info("Building...");
-
-    setTerminal(msg);
-
-    try {
-      const result = await PgBuild.build(explorer.getBuildFiles());
-
-      msg = PgTerminal.editStderr(result.stderr, result.uuid);
-
-      // To update programId each build
-      setBuildCount((c) => c + 1);
-    } catch (e: any) {
-      msg = `${PgTerminal.error("Build error:")} ${e.message}\n`;
-    } finally {
-      setTerminal(msg);
-      setLoading(false);
+  // Run build from terminal
+  useEffect(() => {
+    if (terminalState.buildMounted && terminalState.buildStart) {
+      runBuild();
     }
-  }, [explorer, setLoading, setTerminal, setBuildCount]);
+  }, [terminalState, runBuild]);
+
+  // Loading state for if the command started when the component wasn't mounted
+  useEffect(() => {
+    if (terminalState.buildMounted) {
+      if (terminalState.buildLoading) setLoading(true);
+      else setLoading(false);
+    }
+  }, [terminalState, setLoading]);
 
   return (
     <Wrapper>
       <Button
         kind="secondary"
-        onClick={build}
+        onClick={runBuild}
         disabled={loading}
         fullWidth
         btnLoading={loading}

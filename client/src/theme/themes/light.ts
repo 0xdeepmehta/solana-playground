@@ -1,10 +1,11 @@
 import { HighlightStyle, tags as t } from "@codemirror/highlight";
+
 import Theme from "../interface";
 
 // BG
-const DARK = "#2c2c2c";
+const BG_DARK = "#2c2c2c";
 const BG_LIGHT = "#f3f3f3";
-const LIGHTER = "#ffffff";
+const BG_WHITE = "#ffffff";
 
 // FG
 const BLUE = "#2979cc";
@@ -23,10 +24,12 @@ const ERROR_RED = "#ff5555";
 const TEXT_PRIMARY = "#333333";
 const TEXT_SECONDARY = "#555555";
 
+const BORDER_COLOR = "#eeeeee";
+
 // State
 const COMMENT = "#238000";
 const SELECTION = "#e5ebf1";
-const HOVER = "#00000030";
+const HOVER = "#00000010";
 const DISABLED = "#cccccc";
 
 const highlight = HighlightStyle.define([
@@ -147,12 +150,13 @@ export const LIGHT: Theme = {
   isDark: false,
   colors: {
     default: {
-      bg: LIGHTER,
+      bgPrimary: BG_WHITE,
+      bgSecondary: BG_LIGHT,
       primary: BLUE,
       secondary: PURPLE,
       textPrimary: TEXT_PRIMARY,
       textSecondary: TEXT_SECONDARY,
-      borderColor: TEXT_SECONDARY,
+      borderColor: SELECTION,
     },
     state: {
       hover: {
@@ -176,15 +180,14 @@ export const LIGHT: Theme = {
       },
     },
     left: {
-      bg: DARK,
+      bg: BG_DARK,
     },
     right: {
       bg: BG_LIGHT,
     },
     editor: {
-      text: {
-        color: "#0f1780",
-      },
+      bg: BG_WHITE,
+      color: "#0f1780",
       selection: {
         bg: SELECTION,
       },
@@ -196,7 +199,7 @@ export const LIGHT: Theme = {
         activeColor: TEXT_PRIMARY,
       },
       activeLine: {
-        borderColor: "#eeeeee",
+        borderColor: BORDER_COLOR,
       },
     },
     iconButton: {
@@ -204,13 +207,23 @@ export const LIGHT: Theme = {
       selectedBorderColor: BG_LIGHT,
     },
     contrast: {
-      color: LIGHTER,
+      color: BG_WHITE,
       primary: true,
       secondary: true,
     },
     bottom: {
-      color: LIGHTER,
+      color: BG_WHITE,
     },
+    home: {
+      bg: BG_LIGHT,
+      card: {
+        bg: BG_WHITE,
+      },
+    },
+  },
+  skeleton: {
+    color: "#e5e4e6",
+    highlightColor: BG_LIGHT,
   },
   highlight,
 };

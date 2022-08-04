@@ -13,6 +13,7 @@ import { useAtom } from "jotai";
 import styled, { css } from "styled-components";
 import { Resizable } from "re-resizable";
 
+import TestSkeleton from "./Test/TestSkeleton";
 import { Wormhole } from "../../../Loading";
 import { ClassName, Id } from "../../../../constants";
 import { TAB_HEIGHT } from "../../Main/Tabs";
@@ -67,9 +68,10 @@ const Right: FC<RightProps> = ({ sidebarState, width, setWidth }) => {
   }, [explorer, setLoading]);
 
   const [height, setHeight] = useState({
-    window: document.getElementById(Id.ROOT)?.getClientRects()[0].height ?? 979,
+    window:
+      document.getElementById(Id.ROOT)?.getClientRects()[0]?.height ?? 979,
     bottom:
-      document.getElementById(Id.BOTTOM)?.getClientRects()[0].height ?? 24,
+      document.getElementById(Id.BOTTOM)?.getClientRects()[0]?.height ?? 24,
   });
 
   // Resize the sidebar on window resize event
@@ -121,8 +123,12 @@ const Right: FC<RightProps> = ({ sidebarState, width, setWidth }) => {
     >
       <Wrapper windowHeight={height.window} bottomHeight={height.bottom}>
         <StyledTitle sidebarState={sidebarState} />
-        <Suspense fallback={<RightLoading />}>
-          {loading ? <RightLoading /> : <Inside sidebarState={sidebarState} />}
+        <Suspense fallback={<RightLoading sidebarState={sidebarState} />}>
+          {loading ? (
+            <RightLoading sidebarState={sidebarState} />
+          ) : (
+            <Inside sidebarState={sidebarState} />
+          )}
         </Suspense>
       </Wrapper>
     </Resizable>
@@ -154,11 +160,22 @@ const Title: FC<TitleProps> = ({ sidebarState, className }) => (
   </div>
 );
 
-const RightLoading = () => (
-  <LoadingWrapper>
-    <Wormhole />
-  </LoadingWrapper>
-);
+interface RightLoadingProps {
+  sidebarState: string;
+}
+
+const RightLoading: FC<RightLoadingProps> = ({ sidebarState }) => {
+  switch (sidebarState) {
+    case Sidebar.TEST:
+      return <TestSkeleton />;
+    default:
+      return (
+        <LoadingWrapper>
+          <Wormhole />
+        </LoadingWrapper>
+      );
+  }
+};
 
 const MIN_WIDTH = 180;
 

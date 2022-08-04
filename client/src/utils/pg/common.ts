@@ -1,6 +1,7 @@
 import { LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 
 import { Endpoint, EXPLORER_URL, SOLSCAN_URL } from "../../constants";
+import { PgConnection } from "./connection";
 
 export class PgCommon {
   static readonly TRANSITION_SLEEP = 200;
@@ -9,20 +10,26 @@ export class PgCommon {
    * @param ms amount of time to sleep in ms
    * @returns a promise that will resolve after specified ms
    */
-  static async sleep(ms: number) {
+  static async sleep(ms: number = this.TRANSITION_SLEEP) {
     return new Promise((res) => setTimeout((s) => res(s), ms));
   }
 
   /**
-   * @returns the decoded utf-8 string
+   * @returns the decoded string
    */
-  static decodeArrayBuffer(arrayBuffer: ArrayBuffer) {
-    const decoder = new TextDecoder("utf-8");
+  static decodeArrayBuffer(arrayBuffer: ArrayBuffer, type: string = "utf-8") {
+    const decoder = new TextDecoder(type);
     const decodedString = decoder.decode(arrayBuffer);
 
     return decodedString;
   }
 
+  /**
+   * Check whether the http response is OK.
+   * If there is an error, decode the array buffer and return it.
+   *
+   * @returns response array buffer if the response is OK
+   */
   static async checkForRespErr(resp: Response) {
     const arrayBuffer = await resp.arrayBuffer();
 
@@ -218,5 +225,21 @@ export class PgCommon {
       if (+match === 0) return ""; // or if (/\s+/.test(match)) for white spaces
       return index === 0 ? match.toLowerCase() : match.toUpperCase();
     });
+  }
+
+  /**
+   * @returns automatic airdrop amount
+   */
+  static getAirdropAmount(endpoint: Endpoint = PgConnection.endpoint) {
+    switch (endpoint) {
+      case Endpoint.LOCALHOST:
+        return 100;
+      case Endpoint.DEVNET:
+        return 2;
+      case Endpoint.TESTNET:
+        return 1;
+      default:
+        return null;
+    }
   }
 }

@@ -20,13 +20,14 @@ import InputLabel from "./InputLabel";
 import Tooltip from "../../../../Tooltip";
 import Input, { defaultInputProps } from "../../../../Input";
 import useUpdateTxVals, { Identifiers } from "./useUpdateTxVals";
+import { ClassName } from "../../../../../constants";
 import {
   PgAccount,
   PgProgramInfo,
   PgTest,
   Seed,
 } from "../../../../../utils/pg";
-import { Minus, Plus } from "../../../../Icons";
+import { Close, Minus, Plus } from "../../../../Icons";
 import { useCurrentWallet } from "../../../Wallet";
 
 interface AccountProps {
@@ -77,19 +78,12 @@ const Account: FC<AccountProps> = ({ account, functionName, isArg }) => {
     const handleClickOut = (e: globalThis.MouseEvent) => {
       if (!inputWrapperRef.current?.contains(e.target as Node)) {
         setShowSearch(false);
-        setShowSeed(false);
-        setShowAta(false);
       }
     };
 
     if (showSearch) document.addEventListener("mousedown", handleClickOut);
-    else {
-      if (showAta) setShowAta(false);
-      else if (showSeed) setShowSeed(false);
-    }
-
     return () => document.removeEventListener("mousedown", handleClickOut);
-  }, [showSearch, showAta, showSeed, setShowSearch, setShowSeed, setShowAta]);
+  }, [showSearch, showAta, showSeed]);
 
   const handleMyAddress = useCallback(() => {
     setVal(walletPkStr);
@@ -105,13 +99,25 @@ const Account: FC<AccountProps> = ({ account, functionName, isArg }) => {
     setShowSearch(false);
   }, [account.isSigner]);
 
-  const handleSeed = useCallback(() => {
+  const openSeed = useCallback(() => {
     setShowSeed(true);
   }, []);
 
-  const handleAta = useCallback(() => {
+  const openAta = useCallback(() => {
     setShowAta(true);
   }, []);
+
+  const closeSeed = useCallback(() => {
+    setShowSeed(false);
+  }, []);
+
+  const closeAta = useCallback(() => {
+    setShowAta(false);
+  }, []);
+
+  useEffect(() => {
+    if (!showSeed || !showAta) setShowSearch(false);
+  }, [showSeed, showAta]);
 
   // Update values for test
   useUpdateTxVals({
@@ -142,18 +148,18 @@ const Account: FC<AccountProps> = ({ account, functionName, isArg }) => {
             disabled={accountExists}
             {...defaultInputProps}
           />
-          {showSearch && (
+          {(showSearch || showSeed || showAta) && (
             <SearchWrapper>
               {showSeed ? (
                 <ShowSeed
                   setVal={setVal}
-                  setShowSearch={setShowSearch}
+                  closeSeed={closeSeed}
                   removeSignerKp={removeSignerKp}
                 />
               ) : showAta ? (
                 <ShowAta
                   setVal={setVal}
-                  setShowSearch={setShowSearch}
+                  closeAta={closeAta}
                   removeSignerKp={removeSignerKp}
                   walletPkStr={walletPkStr}
                 />
@@ -163,10 +169,8 @@ const Account: FC<AccountProps> = ({ account, functionName, isArg }) => {
                     <Element onClick={handleMyAddress}>My address</Element>
                   )}
                   <Element onClick={handleRandom}>Random</Element>
-                  <Element onClick={handleSeed}>From seed</Element>
-                  <Element onClick={handleAta}>
-                    Associated token address
-                  </Element>
+                  <Element onClick={openSeed}>From seed</Element>
+                  <Element onClick={openAta}>Associated token address</Element>
                 </>
               )}
             </SearchWrapper>
@@ -197,6 +201,7 @@ const SearchWrapper = styled.div`
     outline: 1px solid
       ${theme.colors.default.primary + theme.transparency?.medium};
     border-radius: ${theme.borderRadius};
+    position: relative;
   `}
 `;
 
@@ -213,18 +218,13 @@ const Element = styled.div`
   `}
 `;
 
-interface ShowGenProps {
+interface ShowSeedProps {
   setVal: Dispatch<SetStateAction<string>>;
-  setShowSearch: Dispatch<SetStateAction<boolean>>;
+  closeSeed: () => void;
   removeSignerKp: () => void;
-  walletPkStr?: string;
 }
 
-const ShowSeed: FC<ShowGenProps> = ({
-  setVal,
-  setShowSearch,
-  removeSignerKp,
-}) => {
+const ShowSeed: FC<ShowSeedProps> = ({ setVal, closeSeed, removeSignerKp }) => {
   const programStr = useMemo(() => {
     const result = PgProgramInfo.getKp();
     if (result?.err) return "";
@@ -249,11 +249,11 @@ const ShowSeed: FC<ShowGenProps> = ({
       )[0].toBase58();
       setVal(pkStr);
       removeSignerKp();
-      setShowSearch(false);
+      closeSeed();
     } catch (e: any) {
       console.log(e.message);
     }
-  }, [seeds, programId, setVal, removeSignerKp, setShowSearch]);
+  }, [seeds, programId, setVal, removeSignerKp, closeSeed]);
 
   // Submit on Enter
   useEffect(() => {
@@ -267,6 +267,7 @@ const ShowSeed: FC<ShowGenProps> = ({
 
   return (
     <ShowGenWrapper>
+      <ShowGenClose close={closeSeed} />
       <ShowGenTitle>Generate from seed</ShowGenTitle>
       {seeds.map((seed, i) => (
         <SeedInput key={i} index={i} seed={seed} setSeeds={setSeeds} />
@@ -296,25 +297,35 @@ interface SeedInputProps {
 
 const SeedInput: FC<SeedInputProps> = ({ index, seed, setSeeds }) => {
   const [showAddSeed, setShowAddSeed] = useState(false);
+  const [error, setError] = useState(false);
 
   const handleSeed = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
+      const val = e.target.value;
       setSeeds((seeds) => {
-        seeds[index] = { value: e.target.value, type: seed.type };
+        seeds[index] = { value: val, type: seed.type };
 
         return [...seeds];
       });
+
+      try {
+        if (!val && seed.type === "string") return;
+        PgTest.parse(val, seed.type);
+        setError(false);
+      } catch {
+        setError(true);
+      }
     },
     [index, seed.type, setSeeds]
   );
 
   const toggleAddSeed = useCallback(() => {
     setShowAddSeed((s) => !s);
-  }, [setShowAddSeed]);
+  }, []);
 
   const closeAddSeed = useCallback(() => {
     setShowAddSeed(false);
-  }, [setShowAddSeed]);
+  }, []);
 
   const addSeed = useCallback(
     (type: IdlType) => {
@@ -326,11 +337,18 @@ const SeedInput: FC<SeedInputProps> = ({ index, seed, setSeeds }) => {
 
   const addSeedString = useCallback(() => {
     addSeed("string");
-    closeAddSeed();
-  }, [addSeed, closeAddSeed]);
+  }, [addSeed]);
 
   const addSeedPk = useCallback(() => {
     addSeed("publicKey");
+  }, [addSeed]);
+
+  const addSeedBytes = useCallback(() => {
+    addSeed("bytes");
+  }, [addSeed]);
+
+  const addSeedNumber = useCallback(() => {
+    addSeed("i32");
   }, [addSeed]);
 
   const removeSeed = useCallback(() => {
@@ -338,12 +356,12 @@ const SeedInput: FC<SeedInputProps> = ({ index, seed, setSeeds }) => {
   }, [index, setSeeds]);
 
   const seedInputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
+  // Focus on mount
   useEffect(() => {
     seedInputRef.current?.focus();
   }, []);
-
-  const menuRef = useRef<HTMLDivElement>(null);
 
   // Close showAddSeed on outside click
   useEffect(() => {
@@ -360,12 +378,16 @@ const SeedInput: FC<SeedInputProps> = ({ index, seed, setSeeds }) => {
 
   return (
     <ShowGenInputWrapper>
-      <InputLabel label={`Seed(${index + 1})`} type={seed.type} />
+      <InputLabel
+        label={`Seed(${index + 1})`}
+        type={seed.type === "i32" ? "number" : seed.type}
+      />
       <SeedInputWrapper>
         <Input
           ref={seedInputRef}
           value={seed.value}
           onChange={handleSeed}
+          className={error ? ClassName.ERROR : ""}
           {...defaultInputProps}
         />
         {isFirst ? (
@@ -379,6 +401,8 @@ const SeedInput: FC<SeedInputProps> = ({ index, seed, setSeeds }) => {
               <AddSeedMenu ref={menuRef}>
                 <AddSeedItem onClick={addSeedString}>String</AddSeedItem>
                 <AddSeedItem onClick={addSeedPk}>Pubkey</AddSeedItem>
+                <AddSeedItem onClick={addSeedNumber}>Number</AddSeedItem>
+                <AddSeedItem onClick={addSeedBytes}>Bytes</AddSeedItem>
               </AddSeedMenu>
             )}
           </AddSeedWrapper>
@@ -419,7 +443,6 @@ const AddSeedMenu = styled.div`
 
 const AddSeedItem = styled.div`
   ${({ theme }) => css`
-    width: max-content;
     padding: 0.5rem;
     color: ${theme.colors.default.textSecondary};
     transition: all ${theme.transition?.duration.short}
@@ -433,9 +456,16 @@ const AddSeedItem = styled.div`
   `}
 `;
 
-const ShowAta: FC<ShowGenProps> = ({
+interface ShowAtaProps {
+  setVal: Dispatch<SetStateAction<string>>;
+  closeAta: () => void;
+  removeSignerKp: () => void;
+  walletPkStr: string;
+}
+
+const ShowAta: FC<ShowAtaProps> = ({
   setVal,
-  setShowSearch,
+  closeAta,
   removeSignerKp,
   walletPkStr,
 }) => {
@@ -472,11 +502,11 @@ const ShowAta: FC<ShowGenProps> = ({
       ).toBase58();
       setVal(ata);
       removeSignerKp();
-      setShowSearch(false);
+      closeAta();
     } catch (e: any) {
       console.log(e.message);
     }
-  }, [mint, owner, setVal, removeSignerKp, setShowSearch]);
+  }, [mint, owner, setVal, removeSignerKp, closeAta]);
 
   // Submit on Enter
   useEffect(() => {
@@ -490,7 +520,8 @@ const ShowAta: FC<ShowGenProps> = ({
 
   return (
     <ShowGenWrapper>
-      <ShowGenTitle>Generate associated token address</ShowGenTitle>
+      <ShowGenClose close={closeAta} />
+      <ShowGenTitle>Generate ATA</ShowGenTitle>
       <ShowGenInputWrapper>
         <InputLabel label="Mint" type="publicKey" />
         <Input
@@ -513,7 +544,25 @@ const ShowAta: FC<ShowGenProps> = ({
   );
 };
 
+interface ShowGenCloseProps {
+  close: () => void;
+}
+
+const ShowGenClose: FC<ShowGenCloseProps> = ({ close }) => (
+  <GenCloseWrapper>
+    <Button onClick={close} kind="icon">
+      <Close />
+    </Button>
+  </GenCloseWrapper>
+);
+
 const ShowGenWrapper = styled.div``;
+
+const GenCloseWrapper = styled.div`
+  position: absolute;
+  top: 0.25rem;
+  right: 0.5rem;
+`;
 
 const ShowGenTitle = styled.div`
   ${({ theme }) => css`

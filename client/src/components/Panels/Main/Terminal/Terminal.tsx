@@ -7,7 +7,7 @@ import "xterm/css/xterm.css";
 import Button from "../../../Button";
 import Progress from "../../../Progress";
 import { useTerminal } from "./useTerminal";
-import { useWasm } from "./useWasm";
+import { usePkg } from "./usePkg";
 import { Clear, Close, DoubleArrow, Tick } from "../../../Icons";
 import { terminalOutputAtom, terminalProgressAtom } from "../../../../state";
 import { PgCommon, PgEditor, PgTerm, PgTerminal } from "../../../../utils/pg";
@@ -210,12 +210,12 @@ const Terminal = () => {
     return () => document.removeEventListener("keydown", handleKeybinds);
   }, [term, height, clear, toggleClose, toggleMaximize]);
 
-  // Set wasm
-  const wasm = useWasm();
+  // Set packages
+  const pkgs = usePkg();
 
   useEffect(() => {
-    if (wasm) term.setWasm(wasm);
-  }, [term, wasm]);
+    if (pkgs) term.setPkgs(pkgs);
+  }, [term, pkgs]);
 
   // Terminal custom events
   useEffect(() => {
@@ -230,6 +230,9 @@ const Terminal = () => {
     const handleRunLastCmd = () => {
       term.runLastCmd();
     };
+    const handleScrollToBottom = () => {
+      term.scrollToBottom();
+    };
 
     document.addEventListener(
       PgTerminal.EVT_NAME_TERMINAL_ENABLE,
@@ -242,6 +245,10 @@ const Terminal = () => {
     document.addEventListener(
       PgTerminal.EVT_NAME_RUN_LAST_CMD,
       handleRunLastCmd
+    );
+    document.addEventListener(
+      PgTerminal.EVT_NAME_SCROLL_TO_BOTTOM,
+      handleScrollToBottom
     );
 
     return () => {
@@ -256,6 +263,10 @@ const Terminal = () => {
       document.removeEventListener(
         PgTerminal.EVT_NAME_RUN_LAST_CMD,
         handleRunLastCmd
+      );
+      document.removeEventListener(
+        PgTerminal.EVT_NAME_SCROLL_TO_BOTTOM,
+        handleScrollToBottom
       );
     };
   }, [term]);

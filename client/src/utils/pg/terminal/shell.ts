@@ -1,4 +1,4 @@
-import PgTty from "./tty";
+import { PgTty } from "./tty";
 import ShellHistory from "./shell-history";
 import {
   ActiveCharPrompt,
@@ -9,9 +9,11 @@ import {
   hasTrailingWhitespace,
   isIncompleteInput,
 } from "./shell-utils";
-import { TerminalAction } from "../../../state";
-import { PgTerminal, Wasm, WasmPkg } from "./terminal";
+import { PgTerminal } from "./terminal";
 import { PgWallet } from "../wallet";
+import { PgCommand } from "./commands";
+import { PkgName, Pkgs } from "./pkg";
+import { TerminalAction } from "../../../state";
 
 type AutoCompleteHandler = (index: number, tokens: string[]) => string[];
 type ShellOptions = { historySize: number; maxAutocompleteEntries: number };
@@ -24,16 +26,15 @@ type ShellOptions = { historySize: number; maxAutocompleteEntries: number };
  * - Output text to the tty -> terminal
  * - Interpret text within the tty to launch processes and interpret programs
  */
-export default class PgShell {
-  pgTty: PgTty;
-  history: ShellHistory;
-
-  maxAutocompleteEntries: number;
-  _autocompleteHandlers: AutoCompleteHandler[];
-  _active: boolean;
-  _activePrompt?: ActivePrompt;
-  _activeCharPrompt?: ActiveCharPrompt;
-  _wasm?: Wasm;
+export class PgShell {
+  private _pgTty: PgTty;
+  private _history: ShellHistory;
+  private _active: boolean;
+  private _maxAutocompleteEntries: number;
+  private _autocompleteHandlers: AutoCompleteHandler[];
+  private _activePrompt?: ActivePrompt;
+  private _activeCharPrompt?: ActiveCharPrompt;
+  private _pkgs?: Pkgs;
 
   constructor(
     pgTty: PgTty,
@@ -42,115 +43,34 @@ export default class PgShell {
       maxAutocompleteEntries: 100,
     }
   ) {
-    this.pgTty = pgTty;
-    this.history = new ShellHistory(options.historySize);
+    this._pgTty = pgTty;
+    this._history = new ShellHistory(options.historySize);
 
-    this.maxAutocompleteEntries = options.maxAutocompleteEntries;
+    this._maxAutocompleteEntries = options.maxAutocompleteEntries;
     this._autocompleteHandlers = [
       (index, tokens) => {
-        return this.history.entries;
+        return this._history.getEntries();
       },
     ];
     this._active = false;
   }
 
   /**
-   * This function runs when user presses `Enter` in terminal
-   * @returns if the command is valid
+   * @returns terminal history
    */
-  _parseCommand(cmd: string) {
-    cmd = cmd.trim();
-    let isCmdValid = false;
-    if (cmd === "help") {
-      PgTerminal.logWasm(PgTerminal.HELP_TEXT);
-      this.enable();
-      isCmdValid = true;
-    }
-    if (cmd === "build") {
-      PgTerminal.setTerminalState(TerminalAction.buildStart);
-      isCmdValid = true;
-    }
-    if (cmd === "deploy") {
-      if (PgWallet.checkIsPgConnected())
-        PgTerminal.setTerminalState(TerminalAction.deployStart);
-
-      isCmdValid = true;
-    }
-    if (cmd === "clear") {
-      // Move first line to the top
-      this.pgTty.clearTty();
-      // Clear everything
-      this.pgTty.xterm.clear();
-      this.prompt();
-      isCmdValid = true;
-    }
-    if (cmd === "connect") {
-      PgTerminal.setTerminalState(TerminalAction.walletConnectOrSetupStart);
-      isCmdValid = true;
-    }
-
-    // This guarantees command only start with the specified command name
-    // solana-keygen would not count for cmdName === "solana"
-    const cmdName = cmd.split(" ")?.at(0);
-
-    if (cmdName === "solana") {
-      const wasm = this._wasm;
-      if (PgWallet.checkIsPgConnected()) {
-        if (wasm?.runSolana) {
-          // @ts-ignore
-          wasm.runSolana(cmd, ...PgTerminal.getCliArgs(WasmPkg.SOLANA_CLI));
-        } else {
-          PgTerminal.loadWasm(WasmPkg.SOLANA_CLI);
-        }
-      }
-
-      isCmdValid = true;
-    }
-    if (cmdName === "spl-token") {
-      const wasm = this._wasm;
-      if (PgWallet.checkIsPgConnected()) {
-        if (wasm?.runSplToken) {
-          wasm.runSplToken(
-            cmd,
-            // @ts-ignore
-            ...PgTerminal.getCliArgs(WasmPkg.SPL_TOKEN_CLI)
-          );
-        } else {
-          PgTerminal.loadWasm(WasmPkg.SPL_TOKEN_CLI);
-        }
-      }
-
-      isCmdValid = true;
-    }
-
-    // Special commands
-    if (cmd === "!!") {
-      // Run the last command
-      const entries = this.history.entries;
-      if (!entries.length) {
-        this.pgTty.println("No previous command.");
-        this.enable();
-      } else {
-        const lastCmd = entries[entries.length - 1];
-        this._parseCommand(lastCmd);
-      }
-
-      isCmdValid = true;
-    }
-
-    // Only new prompt after invalid command, other commands will automatically
-    // generate new prompt
-    if (!isCmdValid) {
-      if (cmd) {
-        this.pgTty.println(`Command '${PgTerminal.italic(cmd)}' not found.\n`);
-      }
-
-      this.enable();
-    }
+  getHistory() {
+    return this._history;
   }
 
-  setWasm(wasm: Wasm) {
-    this._wasm = wasm;
+  setPkgs(pkgs: Pkgs) {
+    this._pkgs = pkgs;
+  }
+
+  /**
+   * Disable shell
+   */
+  disable() {
+    this._active = false;
   }
 
   /**
@@ -163,7 +83,7 @@ export default class PgShell {
     setTimeout(() => {
       this._active = true;
       this.prompt();
-      this.pgTty.read(""); // Enables history
+      this._pgTty.read(""); // Enables history
     }, 10);
   }
 
@@ -174,12 +94,12 @@ export default class PgShell {
    */
   async prompt() {
     // If we are already prompting, do nothing
-    if (this._activePrompt && this.pgTty.getInputStartsWithPrompt()) {
+    if (this._activePrompt && this._pgTty.getInputStartsWithPrompt()) {
       return;
     }
 
     try {
-      this._activePrompt = this.pgTty.read(PgTerminal.PROMPT);
+      this._activePrompt = this._pgTty.read(PgTerminal.PROMPT);
       this._active = true;
       let line = await this._activePrompt.promise;
 
@@ -188,12 +108,12 @@ export default class PgShell {
         return;
       }
 
-      if (this.history) {
-        const input = this.pgTty.getInput().trim();
-        this.history.push(input);
+      if (this._history) {
+        const input = this._pgTty.getInput().trim();
+        this._history.push(input);
       }
     } catch (e: any) {
-      this.pgTty.println(e.message);
+      this._pgTty.println(e.message);
 
       this.prompt();
     }
@@ -209,13 +129,13 @@ export default class PgShell {
    */
   printAndRestartPrompt(callback: () => Promise<any> | undefined) {
     // Complete input
-    this.pgTty.setCursor(this.pgTty.getInput().length);
-    this.pgTty.print("\r\n");
+    this._pgTty.setCursor(this._pgTty.getInput().length);
+    this._pgTty.print("\r\n");
 
     // Prepare a function that will resume prompt
     const resume = () => {
-      this.pgTty.setCursor(this.pgTty.getCursor());
-      this.pgTty.setInput(this.pgTty.getInput());
+      this._pgTty.setCursor(this._pgTty.getCursor());
+      this._pgTty.setInput(this._pgTty.getInput());
     };
 
     // Call the given callback to echo something, and if there is a promise
@@ -229,67 +149,19 @@ export default class PgShell {
   }
 
   /**
-   * Move cursor at given direction
-   */
-  handleCursorMove = (dir: number) => {
-    if (dir > 0) {
-      const num = Math.min(
-        dir,
-        this.pgTty.getInput().length - this.pgTty.getCursor()
-      );
-      this.pgTty.setCursorDirectly(this.pgTty.getCursor() + num);
-    } else if (dir < 0) {
-      const num = Math.max(dir, -this.pgTty.getCursor());
-      this.pgTty.setCursorDirectly(this.pgTty.getCursor() + num);
-    }
-  };
-
-  /**
-   * Erase a character at cursor location
-   */
-  handleCursorErase = (backspace: boolean) => {
-    if (backspace) {
-      if (this.pgTty.getCursor() <= 0) return;
-      const newInput =
-        this.pgTty.getInput().substring(0, this.pgTty.getCursor() - 1) +
-        this.pgTty.getInput().substring(this.pgTty.getCursor());
-      this.pgTty.clearInput();
-      this.pgTty.setCursorDirectly(this.pgTty.getCursor() - 1);
-      this.pgTty.setInput(newInput, true);
-    } else {
-      const newInput =
-        this.pgTty.getInput().substring(0, this.pgTty.getCursor()) +
-        this.pgTty.getInput().substring(this.pgTty.getCursor() + 1);
-      this.pgTty.setInput(newInput);
-    }
-  };
-
-  /**
-   * Insert character at cursor location
-   */
-  handleCursorInsert = (data: string) => {
-    const newInput =
-      this.pgTty.getInput().substring(0, this.pgTty.getCursor()) +
-      data +
-      this.pgTty.getInput().substring(this.pgTty.getCursor());
-    this.pgTty.setCursorDirectly(this.pgTty.getCursor() + data.length);
-    this.pgTty.setInput(newInput);
-  };
-
-  /**
    * @param clearCmd whether to clean the current line before parsing the command
    *
    * Handle input completion
    */
   handleReadComplete = (clearCmd?: boolean) => {
-    const input = this.pgTty.getInput();
+    const input = this._pgTty.getInput();
     if (this._activePrompt && this._activePrompt.resolve) {
       this._activePrompt.resolve(input);
       this._activePrompt = undefined;
     }
 
-    if (clearCmd) this.pgTty.clearCurrentLine();
-    else this.pgTty.print("\r\n");
+    if (clearCmd) this._pgTty.clearCurrentLine();
+    else this._pgTty.print("\r\n");
 
     this._active = false;
 
@@ -305,43 +177,93 @@ export default class PgShell {
       return;
     }
 
-    if (this.pgTty.getFirstInit() && this._activePrompt) {
-      const line = this.pgTty
+    if (this._pgTty.getFirstInit() && this._activePrompt) {
+      const line = this._pgTty
         .getBuffer()
-        .getLine(this.pgTty.getBuffer().cursorY + this.pgTty.getBuffer().baseY);
+        .getLine(
+          this._pgTty.getBuffer().cursorY + this._pgTty.getBuffer().baseY
+        );
       if (!line) return;
 
       const promptRead = line.translateToString(
         false,
         0,
-        this.pgTty.getBuffer().cursorX
+        this._pgTty.getBuffer().cursorX
       );
       this._activePrompt.promptPrefix = promptRead;
-      this.pgTty.setPromptPrefix(promptRead);
-      this.pgTty.setFirstInit(false);
+      this._pgTty.setPromptPrefix(promptRead);
+      this._pgTty.setFirstInit(false);
     }
 
     // If we have an active character prompt, satisfy it in priority
     if (this._activeCharPrompt && this._activeCharPrompt.resolve) {
       this._activeCharPrompt.resolve(data);
       this._activeCharPrompt = undefined;
-      this.pgTty.print("\r\n");
+      this._pgTty.print("\r\n");
       return;
     }
 
     // If this looks like a pasted input, expand it
     if (data.length > 3 && data.charCodeAt(0) !== 0x1b) {
       const normData = data.replace(/[\r\n]+/g, "\r");
-      Array.from(normData).forEach((c) => this.handleData(c));
+      Array.from(normData).forEach((c) => this._handleData(c));
     } else {
-      this.handleData(data);
+      this._handleData(data);
+    }
+  };
+
+  /**
+   * Move cursor at given direction
+   */
+  private _handleCursorMove = (dir: number) => {
+    if (dir > 0) {
+      const num = Math.min(
+        dir,
+        this._pgTty.getInput().length - this._pgTty.getCursor()
+      );
+      this._pgTty.setCursorDirectly(this._pgTty.getCursor() + num);
+    } else if (dir < 0) {
+      const num = Math.max(dir, -this._pgTty.getCursor());
+      this._pgTty.setCursorDirectly(this._pgTty.getCursor() + num);
+    }
+  };
+
+  /**
+   * Insert character at cursor location
+   */
+  private _handleCursorInsert = (data: string) => {
+    const newInput =
+      this._pgTty.getInput().substring(0, this._pgTty.getCursor()) +
+      data +
+      this._pgTty.getInput().substring(this._pgTty.getCursor());
+    this._pgTty.setCursorDirectly(this._pgTty.getCursor() + data.length);
+    this._pgTty.setInput(newInput);
+  };
+
+  /**
+   * Erase a character at cursor location
+   */
+  private _handleCursorErase = (backspace: boolean) => {
+    if (backspace) {
+      if (this._pgTty.getCursor() <= 0) return;
+      const newInput =
+        this._pgTty.getInput().substring(0, this._pgTty.getCursor() - 1) +
+        this._pgTty.getInput().substring(this._pgTty.getCursor());
+      this._pgTty.clearInput();
+      this._pgTty.setCursorDirectly(this._pgTty.getCursor() - 1);
+      this._pgTty.setInput(newInput, true);
+    } else {
+      const newInput =
+        this._pgTty.getInput().substring(0, this._pgTty.getCursor()) +
+        this._pgTty.getInput().substring(this._pgTty.getCursor() + 1);
+      this._pgTty.setInput(newInput);
     }
   };
 
   /**
    * Handle a single piece of information from the terminal -> tty.
    */
-  handleData = (data: string) => {
+  private _handleData = (data: string) => {
     // Only Allow CTRL+C Through
     if (!this._active && data !== "\x03") {
       return;
@@ -354,71 +276,71 @@ export default class PgShell {
     if (ord === 0x1b) {
       switch (data.substring(1)) {
         case "[A": // Up arrow
-          if (this.history) {
-            let value = this.history.getPrevious();
+          if (this._history) {
+            let value = this._history.getPrevious();
             if (value) {
-              this.pgTty.setInput(value);
-              this.pgTty.setCursor(value.length);
+              this._pgTty.setInput(value);
+              this._pgTty.setCursor(value.length);
             }
           }
           break;
 
         case "[B": // Down arrow
-          if (this.history) {
-            let value = this.history.getNext();
+          if (this._history) {
+            let value = this._history.getNext();
             if (!value) value = "";
-            this.pgTty.setInput(value);
-            this.pgTty.setCursor(value.length);
+            this._pgTty.setInput(value);
+            this._pgTty.setCursor(value.length);
           }
           break;
 
         case "[D": // Left Arrow
-          this.handleCursorMove(-1);
+          this._handleCursorMove(-1);
           break;
 
         case "[C": // Right Arrow
-          this.handleCursorMove(1);
+          this._handleCursorMove(1);
           break;
 
         case "[3~": // Delete
-          this.handleCursorErase(false);
+          this._handleCursorErase(false);
           break;
 
         case "[F": // End
-          this.pgTty.setCursor(this.pgTty.getInput().length);
+          this._pgTty.setCursor(this._pgTty.getInput().length);
           break;
 
         case "[H": // Home
-          this.pgTty.setCursor(0);
+          this._pgTty.setCursor(0);
           break;
 
         case "b": // ALT + LEFT
           ofs = closestLeftBoundary(
-            this.pgTty.getInput(),
-            this.pgTty.getCursor()
+            this._pgTty.getInput(),
+            this._pgTty.getCursor()
           );
-          if (ofs) this.pgTty.setCursor(ofs);
+          if (ofs) this._pgTty.setCursor(ofs);
           break;
 
         case "f": // ALT + RIGHT
           ofs = closestRightBoundary(
-            this.pgTty.getInput(),
-            this.pgTty.getCursor()
+            this._pgTty.getInput(),
+            this._pgTty.getCursor()
           );
-          if (ofs) this.pgTty.setCursor(ofs);
+          if (ofs) this._pgTty.setCursor(ofs);
           break;
 
         case "\x7F": // CTRL + BACKSPACE
           ofs = closestLeftBoundary(
-            this.pgTty.getInput(),
-            this.pgTty.getCursor()
+            this._pgTty.getInput(),
+            this._pgTty.getCursor()
           );
           if (ofs) {
-            this.pgTty.setInput(
-              this.pgTty.getInput().substring(0, ofs) +
-                this.pgTty.getInput().substring(this.pgTty.getCursor())
+            this._pgTty.setInput(
+              this._pgTty.getInput().substring(0, ofs) +
+                this._pgTty.getInput().substring(this._pgTty.getCursor())
             );
-            this.pgTty.setCursor(ofs);
+            this._pgTty.setCursor(ofs);
           }
           break;
       }
@@ -427,8 +349,8 @@ export default class PgShell {
     else if (ord < 32 || ord === 0x7f) {
       switch (data) {
         case "\r": // ENTER
-          if (isIncompleteInput(this.pgTty.getInput())) {
-            this.handleCursorInsert("\n");
+          if (isIncompleteInput(this._pgTty.getInput())) {
+            this._handleCursorInsert("\n");
           } else {
             this.handleReadComplete();
           }
@@ -437,14 +359,14 @@ export default class PgShell {
         case "\x7F": // BACKSPACE
         case "\x08": // CTRL+H
         case "\x04": // CTRL+D
-          this.handleCursorErase(true);
+          this._handleCursorErase(true);
           break;
 
         case "\t": // TAB
           if (this._autocompleteHandlers.length > 0) {
-            const inputFragment = this.pgTty
+            const inputFragment = this._pgTty
               .getInput()
-              .substring(0, this.pgTty.getCursor());
+              .substring(0, this._pgTty.getCursor());
             const hasTrailingSpace = hasTrailingWhitespace(inputFragment);
             const candidates = collectAutocompleteCandidates(
               this._autocompleteHandlers,
@@ -459,102 +381,213 @@ export default class PgShell {
             if (candidates.length === 0) {
               // No candidates? Just add a space if there is none already
               if (!hasTrailingSpace) {
-                this.handleCursorInsert(" ");
+                this._handleCursorInsert(" ");
               }
             } else if (candidates.length === 1) {
               // Set the input
-              this.pgTty.setInput(candidates[0]);
+              this._pgTty.setInput(candidates[0]);
 
               // Move the cursor to the end
-              this.pgTty.setCursor(candidates[0].length);
-            } else if (candidates.length <= this.maxAutocompleteEntries) {
+              this._pgTty.setCursor(candidates[0].length);
+            } else if (candidates.length <= this._maxAutocompleteEntries) {
               // If we are less than maximum auto-complete candidates, print
               // them to the user and re-start prompt
               this.printAndRestartPrompt(() => {
-                this.pgTty.printWide(candidates);
+                this._pgTty.printWide(candidates);
                 return undefined;
               });
             } else {
               // If we have more than maximum auto-complete candidates, print
               // them only if the user acknowledges a warning
               this.printAndRestartPrompt(() =>
-                this.pgTty
+                this._pgTty
                   .readChar(
                     `Display all ${candidates.length} possibilities? (y or n)`
                   )
                   .promise.then((yn: string) => {
                     if (yn === "y" || yn === "Y") {
-                      this.pgTty.printWide(candidates);
+                      this._pgTty.printWide(candidates);
                     }
                   })
               );
             }
           } else {
-            this.handleCursorInsert("    ");
+            this._handleCursorInsert("    ");
           }
           break;
 
         case "\x01": // CTRL+A
-          this.pgTty.setCursor(0);
+          this._pgTty.setCursor(0);
           break;
 
         case "\x02": // CTRL+B
-          this.handleCursorMove(-1);
+          this._handleCursorMove(-1);
           break;
 
         // TODO: implement stopping commands
         // case "\x03": // CTRL+C
 
         case "\x05": // CTRL+E
-          this.pgTty.setCursor(this.pgTty.getInput().length);
+          this._pgTty.setCursor(this._pgTty.getInput().length);
           break;
 
         case "\x06": // CTRL+F
-          this.handleCursorMove(1);
+          this._handleCursorMove(1);
           break;
 
         case "\x07": // CTRL+G
-          if (this.history) this.history.rewind();
-          this.pgTty.setInput("");
+          if (this._history) this._history.getPrevious();
+          this._pgTty.setInput("");
           break;
 
         case "\x0b": // CTRL+K
-          this.pgTty.setInput(
-            this.pgTty.getInput().substring(0, this.pgTty.getCursor())
+          this._pgTty.setInput(
+            this._pgTty.getInput().substring(0, this._pgTty.getCursor())
           );
-          this.pgTty.setCursor(this.pgTty.getInput().length);
+          this._pgTty.setCursor(this._pgTty.getInput().length);
           break;
 
         case "\x0e": // CTRL+N
-          if (this.history) {
-            let value = this.history.getNext();
+          if (this._history) {
+            let value = this._history.getNext();
             if (!value) value = "";
-            this.pgTty.setInput(value);
-            this.pgTty.setCursor(value.length);
+            this._pgTty.setInput(value);
+            this._pgTty.setCursor(value.length);
           }
           break;
 
         case "\x10": // CTRL+P
-          if (this.history) {
-            let value = this.history.getPrevious();
+          if (this._history) {
+            let value = this._history.getPrevious();
             if (value) {
-              this.pgTty.setInput(value);
-              this.pgTty.setCursor(value.length);
+              this._pgTty.setInput(value);
+              this._pgTty.setCursor(value.length);
             }
           }
           break;
 
         case "\x15": // CTRL+U
-          this.pgTty.setInput(
-            this.pgTty.getInput().substring(this.pgTty.getCursor())
+          this._pgTty.setInput(
+            this._pgTty.getInput().substring(this._pgTty.getCursor())
           );
-          this.pgTty.setCursor(0);
+          this._pgTty.setCursor(0);
           break;
       }
 
       // Handle visible characters
     } else {
-      this.handleCursorInsert(data);
+      this._handleCursorInsert(data);
     }
   };
+
+  /**
+   * This function runs when user presses `Enter` in terminal
+   * @returns if the command is valid
+   */
+  private _parseCommand(cmd: string) {
+    cmd = cmd.trim();
+    let isCmdValid = false;
+    switch (cmd) {
+      case PgCommand.HELP: {
+        PgTerminal.logWasm(PgCommand.help());
+        this.enable();
+        isCmdValid = true;
+        break;
+      }
+
+      case PgCommand.BUILD: {
+        PgTerminal.setTerminalState(TerminalAction.buildStart);
+        isCmdValid = true;
+        break;
+      }
+
+      case PgCommand.DEPLOY: {
+        if (PgWallet.checkIsPgConnected()) {
+          PgTerminal.setTerminalState(TerminalAction.deployStart);
+        }
+
+        isCmdValid = true;
+        break;
+      }
+
+      case PgCommand.CLEAR: {
+        // Move first line to the top(doesn't remove all xterm buffer)
+        this._pgTty.clearTty();
+        // Clear all
+        this._pgTty.clear();
+        this.prompt();
+        isCmdValid = true;
+        break;
+      }
+
+      case PgCommand.CONNECT: {
+        PgTerminal.setTerminalState(TerminalAction.walletConnectOrSetupStart);
+        isCmdValid = true;
+      }
+    }
+
+    // WASM commands
+    // This guarantees command only start with the specified command name
+    // solana-keygen would not count for cmdName === "solana"
+    const cmdName = cmd.split(" ")?.at(0);
+
+    switch (cmdName) {
+      case PgCommand.SOLANA: {
+        const pkgs = this._pkgs;
+        if (PgWallet.checkIsPgConnected()) {
+          if (pkgs?.runSolana) {
+            // @ts-ignore
+            pkgs.runSolana(cmd, ...PgCommand.getCmdArgs(PkgName.SOLANA_CLI));
+          } else {
+            PgTerminal.loadPkg(PkgName.SOLANA_CLI);
+          }
+        }
+
+        isCmdValid = true;
+        break;
+      }
+
+      case PgCommand.SPL_TOKEN: {
+        const pkgs = this._pkgs;
+        if (PgWallet.checkIsPgConnected()) {
+          if (pkgs?.runSplToken) {
+            pkgs.runSplToken(
+              cmd,
+              // @ts-ignore
+              ...PgCommand.getCmdArgs(PkgName.SPL_TOKEN_CLI)
+            );
+          } else {
+            PgTerminal.loadPkg(PkgName.SPL_TOKEN_CLI);
+          }
+        }
+
+        isCmdValid = true;
+      }
+    }
+
+    // Special command
+    if (cmd === PgCommand.RUN_LAST_CMD) {
+      // Run the last command
+      const entries = this._history.getEntries();
+      if (!entries.length) {
+        this._pgTty.println("No previous command.");
+        this.enable();
+      } else {
+        const lastCmd = entries[entries.length - 1];
+        this._parseCommand(lastCmd);
+      }
+
+      isCmdValid = true;
+    }
+
+    // Only new prompt after invalid command, other commands will automatically
+    // generate new prompt
+    if (!isCmdValid) {
+      if (cmd) {
+        this._pgTty.println(`Command '${PgTerminal.italic(cmd)}' not found.\n`);
+      }
+
+      this.enable();
+    }
+  }
 }

@@ -60,7 +60,7 @@ export class PgTest {
     idlTypes?: IdlTypeDef[],
     idlAccounts?: IdlTypeDef[]
   ): IdlType {
-    if (DEFAULT_TYPES.includes(type) || !idlTypes || !idlAccounts) return type;
+    if (DEFAULT_TYPES.includes(type)) return type;
 
     if (typeof type === "object") {
       if ((type as IdlTypeOption)?.option) {
@@ -85,14 +85,14 @@ export class PgTest {
 
         // Type info might be in 'accounts' instead of 'types'
         let typeInfo = idlTypes
-          .filter((t) => t.name === customTypeName)
+          ?.filter((t) => t.name === customTypeName)
           .at(0)?.type;
         if (!typeInfo) {
-          typeInfo = idlAccounts.filter((t) => t.name === customTypeName)[0]
+          typeInfo = idlAccounts?.filter((t) => t.name === customTypeName)[0]
             .type;
         }
 
-        const kind = typeInfo.kind;
+        const kind = typeInfo?.kind;
         if (kind === "enum") {
           return (customTypeName + "(Enum)") as IdlType;
           // TODO: Error handling based on variants
@@ -201,7 +201,9 @@ export class PgTest {
           parsedV.push(this.parse(el, insideType as IdlType));
         }
 
-        if (!parsedV.length) throw new Error("Invalid vec");
+        if (!parsedV.every((el) => typeof el === typeof insideType)) {
+          throw new Error("Invalid vec");
+        }
       } else if (outerType === "Option" || outerType === "COption") {
         switch (v.toLowerCase()) {
           case "":
@@ -267,15 +269,15 @@ export class PgTest {
           break;
         }
         case "publicKey": {
-          buffer = this.parse(seed.value, "publicKey").toBuffer();
+          buffer = this.parse(seed.value, seed.type).toBuffer();
           break;
         }
         case "bytes": {
-          buffer = Buffer.from(this.parse(seed.value, "bytes"));
+          buffer = Buffer.from(this.parse(seed.value, seed.type));
           break;
         }
         case "i32": {
-          buffer = Buffer.from([this.parse(seed.value, "i32")]);
+          buffer = Buffer.from([this.parse(seed.value, seed.type)]);
           break;
         }
         default: {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtom } from "jotai";
 import styled, { css, useTheme } from "styled-components";
 import { EditorState } from "@codemirror/state";
@@ -7,7 +7,12 @@ import { EditorView } from "@codemirror/view";
 import Home from "./Home";
 import Theme from "../../../../theme/interface";
 import { Wormhole } from "../../../Loading";
-import { autosave, getExtensions } from "./extensions";
+import {
+  autosave,
+  defaultExtensions,
+  rustExtensions,
+  pythonExtensions,
+} from "./extensions";
 import {
   buildCountAtom,
   explorerAtom,
@@ -17,7 +22,7 @@ import { PgExplorer, PgProgramInfo, PgEditor } from "../../../../utils/pg";
 
 const Editor = () => {
   const [explorer] = useAtom(explorerAtom);
-  const [explorerChanged] = useAtom(refreshExplorerAtom); // to re-render on demand
+  const [explorerChanged] = useAtom(refreshExplorerAtom);
   // Update programId on each build
   const [buildCount] = useAtom(buildCountAtom);
 
@@ -180,8 +185,9 @@ const Editor = () => {
 
     // If there is open tabs but the editor is not mounted, mount the editor.
     if (!noOpenTabs && !firstEl) setMount((c) => c + 1);
-    else if (firstEl?.classList.contains("cm-editor"))
+    else if (firstEl?.classList.contains(PgEditor.CLASSNAME)) {
       parentRef.current?.removeChild(firstEl);
+    }
   }, [noOpenTabs, setMount]);
 
   // Create editor
@@ -193,19 +199,11 @@ const Editor = () => {
     if (!curFile) return;
 
     // Remove editor if it's already mounted
-    if (parentRef.current?.hasChildNodes())
+    if (parentRef.current?.hasChildNodes()) {
       parentRef.current.removeChild(parentRef.current.childNodes[0]);
+    }
 
     return new EditorView({
-      state: EditorState.create({
-        doc: curFile.content,
-        extensions: [
-          getExtensions(),
-          editorTheme,
-          theme.highlight,
-          autosave(explorer, curFile, 5000),
-        ],
-      }),
       parent: parentRef.current,
     });
 
@@ -237,51 +235,105 @@ const Editor = () => {
     if (newEl) PgExplorer.setSelectedEl(newEl);
 
     // Change editor state
+    const extensions = [
+      defaultExtensions(),
+      editorTheme,
+      theme.highlight,
+      autosave(explorer, curFile, 5000),
+    ];
+    if (explorer.isCurrentFileRust()) {
+      extensions.push(rustExtensions());
+    } else {
+      extensions.push(pythonExtensions());
+    }
+
     editor.setState(
       EditorState.create({
         doc: curFile.content,
-        extensions: [
-          getExtensions(),
-          editorTheme,
-          theme.highlight,
-          autosave(explorer, curFile, 5000),
-        ],
+        extensions,
       })
     );
 
     //eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, explorer, explorerChanged, setNoOpenTabs]);
 
+  /**
+   * Update /src/lib.rs or /src/lib.py with the programId
+   * Updates the content of the file in the editor and in localstorage
+   * @param currentContent Current content of the file to be updated
+   * @param programId The new program ID to be set
+   * @param extension The extension, which determines the language of the file
+   */
+  const updateLib = useCallback(
+    (currentContent: string, programId: string, extension: "rs" | "py") => {
+      if (!explorer || !editor) return;
+
+      const getProgramIdStartAndEndIndex = (content: string) => {
+        const findTextIndex = content.indexOf(findText);
+        if (!content || !findTextIndex || findTextIndex === -1) return;
+        const quoteStartIndex = findTextIndex + findText.length + 1;
+        const quoteChar = content[quoteStartIndex];
+        const quoteEndIndex = content.indexOf(quoteChar, quoteStartIndex + 1);
+
+        return [quoteStartIndex, quoteEndIndex];
+      };
+
+      // update in localstorage
+      const findText = extension === "py" ? "declare_id" : "declare_id!";
+      let indices = getProgramIdStartAndEndIndex(currentContent);
+      if (!indices) return;
+      let [quoteStartIndex, quoteEndIndex] = indices;
+
+      const updatedContent =
+        currentContent.substring(0, quoteStartIndex + 1) +
+        programId +
+        currentContent.substring(quoteEndIndex);
+      const filePath = `/src/lib.${extension}`;
+      const data = explorer.files[filePath];
+      if (data?.content) {
+        explorer.files[filePath] = { ...data, content: updatedContent };
+      }
+
+      // update in editor
+      const editorContent = editor.state.doc.toString();
+      indices = getProgramIdStartAndEndIndex(editorContent);
+      if (!indices) return;
+      [quoteStartIndex, quoteEndIndex] = indices;
+
+      editor.dispatch({
+        changes: {
+          from: quoteStartIndex + 1,
+          to: quoteEndIndex,
+          insert: programId,
+        },
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [editor, explorer, explorerChanged]
+  );
+
   // Change programId
   useEffect(() => {
     if (!explorer || !parentRef.current || !buildCount || !editor) return;
 
-    const curFile = explorer.getCurrentFile();
-    if (!curFile) return;
-
     const programPkResult = PgProgramInfo.getPk();
     if (programPkResult?.err) return;
+    const programPkStr = programPkResult.programPk!.toBase58();
 
-    const code = editor.state.doc.toString();
-    const findText = "declare_id!";
-    const findTextIndex = code.indexOf(findText);
-    if (findTextIndex === -1) return;
+    const libRsContent = explorer.getFileContentFromPath("/src/lib.rs");
+    if (libRsContent) {
+      updateLib(libRsContent, programPkStr, "rs");
+      return;
+    }
 
-    const quoteStartIndex = findTextIndex + findText.length + 2;
-    const quoteEndIndex = code.indexOf('"', quoteStartIndex);
-
-    if (code.length < quoteStartIndex + 3) return;
-
-    editor.dispatch({
-      changes: {
-        from: quoteStartIndex,
-        to: quoteEndIndex,
-        insert: programPkResult.programPk?.toBase58(),
-      },
-    });
+    const libPyContent = explorer.getFileContentFromPath("/src/lib.py");
+    if (libPyContent) {
+      updateLib(libPyContent, programPkStr, "py");
+      return;
+    }
 
     //eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buildCount, editor]);
+  }, [buildCount, editor, updateLib]);
 
   // Listen for custom events
   useEffect(() => {
@@ -317,6 +369,7 @@ const Wrapper = styled.div`
     &::-webkit-scrollbar,
     & ::-webkit-scrollbar {
       width: ${EDITOR_SCROLLBAR_WIDTH};
+      height: 0.75rem;
     }
 
     &::-webkit-scrollbar-track,

@@ -16,6 +16,7 @@ import {
 import { TerminalAction } from "../../../state";
 import { PgCommon } from "../common";
 import { PkgName, Pkgs } from "./pkg";
+import { PgProgramInfo } from "../program-info";
 
 enum TextState {
   SUCCESS = 0,
@@ -94,8 +95,9 @@ Type ${PgTerminal.bold("help")} to see all commands.`;
   static readonly EVT_NAME_TERMINAL_ENABLE = "terminalenable";
   static readonly EVT_NAME_TERMINAL_DISABLE = "terminaldisable";
   static readonly EVT_NAME_LOAD_PKG = "terminalloadpkg";
-  static readonly EVT_NAME_RUN_LAST_CMD = "terminalrunlastcmd";
   static readonly EVT_NAME_SCROLL_TO_BOTTOM = "terminalscrolltobottom";
+  static readonly EVT_NAME_RUN_LAST_CMD = "terminalrunlastcmd";
+  static readonly EVT_NAME_RUN_CMD_FROM_STR = "terminalruncmdfromstr";
 
   // Emojis
   static readonly CROSS = "❌";
@@ -120,10 +122,12 @@ Type ${PgTerminal.bold("help")} to see all commands.`;
     // Match until ':' from the start of the line: e.g SUBCOMMANDS:
     // TODO: Highlight the text from WASM so we don't have to do this.
     text = text.replace(/^(.*?:)/gm, (match) => {
-      if (!match.includes("   ") && match.startsWith(" "))
+      if (!match.includes("   ") && match.startsWith(" ")) {
         return this.bold(match); // Indented
-      if (!match.toLowerCase().includes("error") && !match.includes("  "))
+      }
+      if (!match.toLowerCase().includes("error") && !match.includes("  ")) {
         return this.primary(match);
+      }
 
       return match;
     });
@@ -186,12 +190,13 @@ Type ${PgTerminal.bold("help")} to see all commands.`;
   /**
    * Edit build stderr that is returned from the build request
    */
-  static editStderr(stderr: string, uuid: string) {
+  static editStderr(stderr: string) {
     // Remove full path
     stderr = stderr.replace(/\s\(\/home.+?(?=\s)/g, "");
 
     // Remove uuid from folders
-    stderr = stderr.replaceAll(uuid, "");
+    const uuid = PgProgramInfo.getProgramInfo().uuid;
+    if (uuid) stderr = stderr.replaceAll(uuid, "");
 
     // Remove rustc error line
     let startIndex = stderr.indexOf("For more");
@@ -341,6 +346,30 @@ Type ${PgTerminal.bold("help")} to see all commands.`;
   }
 
   /**
+   * Dispatch scroll to bottom custom event
+   */
+  static scrollToBottom() {
+    PgCommon.createAndDispatchCustomEvent(this.EVT_NAME_SCROLL_TO_BOTTOM);
+  }
+
+  /**
+   * Wrapper function for commands that interact with the terminal
+   *
+   * This function should be used as a wrapper function when calling any
+   * terminal command.
+   */
+  static async run<T>(cb: () => Promise<T>) {
+    this.disable();
+    this.scrollToBottom();
+    try {
+      return await cb();
+    } catch {
+    } finally {
+      this.enable();
+    }
+  }
+
+  /**
    * Dispatch run last command custom event
    */
   static runLastCmd() {
@@ -348,10 +377,10 @@ Type ${PgTerminal.bold("help")} to see all commands.`;
   }
 
   /**
-   * Dispatch scroll to bottom custom event
+   * Dispatch run cmd from str custom event
    */
-  static scrollToBottom() {
-    PgCommon.createAndDispatchCustomEvent(this.EVT_NAME_SCROLL_TO_BOTTOM);
+  static runCmdFromStr(cmd: string) {
+    PgCommon.createAndDispatchCustomEvent(this.EVT_NAME_RUN_CMD_FROM_STR, cmd);
   }
 }
 
@@ -561,25 +590,7 @@ export class PgTerm {
   }
 
   /**
-   * Runs the last command if it exists
-   *
-   * This function is useful for running wasm cli packages after initial loading
-   */
-  runLastCmd() {
-    // Last command is the current input
-    let lastCmd = this._pgTty.getInput();
-    if (!lastCmd) {
-      const maybeLastCmd = this._pgShell.getHistory().getPrevious();
-      if (maybeLastCmd) lastCmd = maybeLastCmd;
-      else this.println("Unable to run last command.");
-    }
-
-    this._pgTty.setInput(lastCmd);
-    this._pgShell.handleReadComplete(true);
-  }
-
-  /**
-   * Scrolls the terminal to bottom
+   * Scroll the terminal to bottom
    */
   scrollToBottom() {
     this._xterm.scrollToBottom();
@@ -592,6 +603,31 @@ export class PgTerm {
     this._xterm.dispose();
     // @ts-ignore
     delete this._xterm;
+  }
+
+  /**
+   * Run the last command if it exists
+   *
+   * This function is useful for running wasm cli packages after initial loading
+   */
+  runLastCmd() {
+    // Last command is the current input
+    let lastCmd = this._pgTty.getInput();
+    if (!lastCmd) {
+      const maybeLastCmd = this._pgShell.getHistory().getPrevious();
+      if (maybeLastCmd) lastCmd = maybeLastCmd;
+      else this.println("Unable to run last command.");
+    }
+
+    this.runCmdFromStr(lastCmd);
+  }
+
+  /**
+   * Write the given input in the terminal and press enter
+   */
+  runCmdFromStr(cmd: string) {
+    this._pgTty.setInput(cmd);
+    this._pgShell.handleReadComplete(true);
   }
 
   /**

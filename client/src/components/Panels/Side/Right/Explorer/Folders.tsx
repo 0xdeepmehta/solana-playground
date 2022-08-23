@@ -1,6 +1,6 @@
 import { FC, MouseEvent, Ref, useEffect, useMemo, useRef } from "react";
 import { useAtom } from "jotai";
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 
 import LangIcon from "../../../../LangIcon";
 import ExplorerContextMenu from "./ExplorerContextMenu";
@@ -8,7 +8,7 @@ import useExplorerContextMenu from "./useExplorerContextMenu";
 import { Arrow } from "../../../../Icons";
 import { ClassName, Id } from "../../../../../constants";
 import { explorerAtom, refreshExplorerAtom } from "../../../../../state";
-import { PgExplorer } from "../../../../../utils/pg";
+import { Folder as FolderType, PgExplorer } from "../../../../../utils/pg";
 
 const Folders = () => {
   const [explorer] = useAtom(explorerAtom);
@@ -29,15 +29,12 @@ const Folders = () => {
     if (newEl) PgExplorer.setSelectedEl(newEl);
   }, [explorer]);
 
-  // No need to memoize here
-  const root = explorer?.getFolderContent("/");
-
   // Only update local storage if we haven't rendered in 5s
   useEffect(() => {
     let timeOutId: NodeJS.Timeout;
 
     timeOutId = setTimeout(() => {
-      explorer?.saveLs();
+      explorer?.saveTabs().catch();
     }, 5000);
 
     return () => {
@@ -47,17 +44,22 @@ const Folders = () => {
 
   const ctxMenu = useExplorerContextMenu();
 
+  if (!explorer) return null;
+
+  // No need to memoize here
+  const workspaceDir = explorer.getFolderContent(explorer.currentWorkspacePath);
+
   return (
     <RootWrapper
       id={Id.ROOT_DIR}
-      data-path="/"
+      data-path={explorer.currentWorkspacePath}
       onContextMenu={ctxMenu.handleMenu}
     >
-      {root?.folders
+      {workspaceDir?.folders
         .sort((x, y) => x.localeCompare(y))
         .map((f, i) => {
-          const path = "/" + f + "/";
-          const folder = explorer?.getFolderContent(path);
+          const path = explorer.currentWorkspacePath + f + "/";
+          const folder = explorer.getFolderContent(path);
 
           if (!folder) return null;
 
@@ -75,10 +77,8 @@ const Folders = () => {
   );
 };
 
-interface FolderProps {
+interface FolderProps extends FolderType {
   path: string;
-  folders: string[];
-  files: string[];
 }
 
 // RFolder = Recursive Folder
@@ -188,7 +188,31 @@ const File: FC<FileOrFolderProps> = ({ path, name, onClick, className }) => {
 };
 
 const RootWrapper = styled.div`
-  padding-left: 0.5rem;
+  ${({ theme }) => css`
+& .${ClassName.FOLDER}, & .${ClassName.FILE} {
+  display: flex;
+  padding: 0.25rem 0;
+  cursor: pointer;
+  border: 1px solid transparent;
+
+  &.${ClassName.SELECTED} {
+    background-color: ${theme.colors.default.primary + theme.transparency?.low};
+  }
+
+  &.${ClassName.CTX_SELECTED} {
+    background-color: ${
+      theme.colors.default.primary + theme.transparency?.medium
+    };
+    border-color: ${theme.colors.default.primary};
+    border-radius: ${theme.borderRadius};
+  }
+
+  &:hover {
+    background-color: ${
+      theme.colors.default.primary + theme.transparency?.medium
+    };
+  }
+`}
 `;
 
 const FolderInsideWrapper = styled.div`
@@ -217,9 +241,6 @@ const StyledFolder = styled(Folder)`
 
 const StyledFile = styled(File)`
   & img {
-    width: 1rem;
-    height: 1rem;
-    filter: ${({ theme }) => (theme.isDark ? "invert(0.6)" : "invert(0.4)")};
     margin-left: 0.125rem;
   }
 

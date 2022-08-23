@@ -1,4 +1,4 @@
-import { FC } from "react";
+import { FC, useEffect, useState } from "react";
 import styled, { css } from "styled-components";
 
 import Button from "../../../../Button";
@@ -8,29 +8,41 @@ import { TutorialProps, TUTORIALS } from "./tutorials";
 import { DefaultLink } from "../../../../Link";
 import { External } from "../../../../Icons";
 
-const Home = () => (
-  <Wrapper>
-    <ProjectTitle>{PROJECT_NAME}</ProjectTitle>
-    <ContentWrapper>
-      <LeftWrapper>
-        <ContentTitle>Resources</ContentTitle>
-        <ResourcesWrapper>
-          {RESOURCES.map((r, i) => (
-            <Resource key={i} {...r} />
-          ))}
-        </ResourcesWrapper>
-      </LeftWrapper>
-      <RightWrapper>
-        <ContentTitle>Tutorials</ContentTitle>
-        <TutorialsWrapper>
-          {TUTORIALS.map((t, i) => (
-            <Tutorial key={i} {...t} />
-          ))}
-        </TutorialsWrapper>
-      </RightWrapper>
-    </ContentWrapper>
-  </Wrapper>
-);
+const Home = () => {
+  // This prevents unnecessarily fetching the home content for a frame when the
+  // app is first mounted
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    setShow(true);
+  }, []);
+
+  if (!show) return null;
+
+  return (
+    <Wrapper>
+      <ProjectTitle>{PROJECT_NAME}</ProjectTitle>
+      <ContentWrapper>
+        <LeftWrapper>
+          <ContentTitle>Resources</ContentTitle>
+          <ResourcesWrapper>
+            {RESOURCES.map((r, i) => (
+              <Resource key={i} {...r} />
+            ))}
+          </ResourcesWrapper>
+        </LeftWrapper>
+        <RightWrapper>
+          <ContentTitle>Tutorials</ContentTitle>
+          <TutorialsWrapper>
+            {TUTORIALS.map((t, i) => (
+              <Tutorial key={i} {...t} />
+            ))}
+          </TutorialsWrapper>
+        </RightWrapper>
+      </ContentWrapper>
+    </Wrapper>
+  );
+};
 
 const Wrapper = styled.div`
   height: 100%;
@@ -139,12 +151,12 @@ const ResourceButton = styled(Button)`
 `;
 
 const getSrc = (url: string) => {
-  let src;
+  let src: string = "";
 
   if (url.includes("youtube.com")) src = "youtube.png";
   else if (url.includes("dev.to")) src = "devto.png";
 
-  return "icons/platforms/" + src;
+  if (src) return "icons/platforms/" + src;
 };
 
 const Tutorial: FC<TutorialProps> = ({ title, url }) => {

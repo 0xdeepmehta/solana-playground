@@ -14,7 +14,14 @@ import {
   terminalStateAtom,
   txHashAtom,
 } from "../../../../../state";
-import { PgCommon, PgDeploy, PgTerminal } from "../../../../../utils/pg";
+import {
+  PgCommon,
+  PgDeploy,
+  PgProgramInfo,
+  PgTerminal,
+  PgWallet,
+} from "../../../../../utils/pg";
+import { useAuthority } from "./useAuthority";
 
 export const useDeploy = (program: Program = DEFAULT_PROGRAM) => {
   const [pgWallet] = useAtom(pgWalletAtom);
@@ -26,57 +33,71 @@ export const useDeploy = (program: Program = DEFAULT_PROGRAM) => {
   const [, setDeployCount] = useAtom(deployCountAtom);
 
   const { connection: conn } = useConnection();
+  const { authority, hasAuthority, upgradeable } = useAuthority();
 
   const runDeploy = useCallback(async () => {
-    // This doesn't stop the current deploy but stops new deploys
-    setTerminalState(TerminalAction.deployStop);
+    return await PgTerminal.run(async () => {
+      // This doesn't stop the current deploy but stops new deploys
+      setTerminalState(TerminalAction.deployStop);
 
-    PgTerminal.disable();
-    PgTerminal.scrollToBottom();
+      if (!pgWallet.connected) {
+        setTerminal(
+          `${PgTerminal.bold(
+            "Playground Wallet"
+          )} must be connected in order to deploy.`
+        );
+        return;
+      }
+      if (upgradeable === false) {
+        setTerminal(PgTerminal.warning("The program is not upgradeable."));
+        return;
+      }
+      if (hasAuthority === false) {
+        setTerminal(
+          `${PgTerminal.warning(
+            "You don't have the authority to upgrade this program."
+          )}
+Program ID: ${PgProgramInfo.getPk()!.programPk}
+Program authority: ${authority}
+Your address: ${PgWallet.getKp().publicKey}`
+        );
+        return;
+      }
 
-    if (!pgWallet.connected) {
+      setTerminalState(TerminalAction.deployLoadingStart);
       setTerminal(
-        `${PgTerminal.bold(
-          "Playground Wallet"
-        )} must be connected in order to deploy.`
+        `${PgTerminal.info(
+          "Deploying..."
+        )} This could take a while depending on the program size and network conditions.`
       );
-      PgTerminal.enable();
-      return;
-    }
+      setProgress(0.1);
 
-    setTerminalState(TerminalAction.deployLoadingStart);
+      let msg;
+      try {
+        const startTime = performance.now();
+        const txHash = await PgDeploy.deploy(
+          conn,
+          pgWallet,
+          setProgress,
+          program.buffer
+        );
+        const timePassed = (performance.now() - startTime) / 1000;
+        setTxHash(txHash);
 
-    let msg = `${PgTerminal.info(
-      "Deploying..."
-    )} This could take a while depending on the program size and network conditions.`;
-    setTerminal(msg);
-    setProgress(0.1);
-
-    try {
-      const startTime = performance.now();
-      const txHash = await PgDeploy.deploy(
-        conn,
-        pgWallet,
-        setProgress,
-        program.buffer
-      );
-      const timePassed = (performance.now() - startTime) / 1000;
-      setTxHash(txHash);
-
-      msg = `${PgTerminal.success(
-        "Deployment successful."
-      )} Completed in ${PgCommon.secondsToTime(timePassed)}.`;
-      setDeployCount((c) => c + 1);
-    } catch (e: any) {
-      const convertedError = PgTerminal.convertErrorMessage(e.message);
-      msg = `${PgTerminal.error("Deployment error:")} ${convertedError}`;
-      return 1; // To indicate error
-    } finally {
-      setTerminal(msg + "\n");
-      setTerminalState(TerminalAction.deployLoadingStop);
-      setProgress(0);
-      PgTerminal.enable();
-    }
+        msg = `${PgTerminal.success(
+          "Deployment successful."
+        )} Completed in ${PgCommon.secondsToTime(timePassed)}.`;
+        setDeployCount((c) => c + 1);
+      } catch (e: any) {
+        const convertedError = PgTerminal.convertErrorMessage(e.message);
+        msg = `${PgTerminal.error("Deployment error:")} ${convertedError}`;
+        return 1; // To indicate error
+      } finally {
+        setTerminal(msg + "\n");
+        setTerminalState(TerminalAction.deployLoadingStop);
+        setProgress(0);
+      }
+    });
 
     //eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -84,11 +105,14 @@ export const useDeploy = (program: Program = DEFAULT_PROGRAM) => {
     pgWallet,
     pgWalletChanged,
     program,
+    authority,
+    hasAuthority,
+    upgradeable,
     setTerminal,
     setTxHash,
     setTerminalState,
     setDeployCount,
   ]);
 
-  return { runDeploy, pgWallet };
+  return { runDeploy, pgWallet, hasAuthority, upgradeable };
 };

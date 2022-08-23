@@ -14,6 +14,7 @@ import { ClassName } from "../../../../../constants";
 import { terminalOutputAtom, txHashAtom } from "../../../../../state";
 import {
   PgCommon,
+  PgPreferences,
   PgTerminal,
   PgTest,
   PgTx,
@@ -144,39 +145,53 @@ const FunctionInside: FC<FunctionInsideProps> = ({ ixs, idl }) => {
 
   // Test submission
   const handleTest = useCallback(async () => {
-    if (!currentWallet) return;
+    const showLogTxHash = await PgTerminal.run(async () => {
+      if (!currentWallet) return;
 
-    PgTerminal.disable();
+      setLoading(true);
+      setTerminal(PgTerminal.info(`Testing '${ixs.name}'...`));
 
-    setLoading(true);
+      const preferences = PgPreferences.getPreferences();
 
-    setTerminal(PgTerminal.info(`Testing '${ixs.name}'...`));
-    let msg = "";
+      let msg = "";
 
-    try {
-      await PgCommon.sleep(); // To smooth out button transition
-      const txHash = await PgTest.test(txVals, idl, conn, currentWallet);
-      setTxHash(txHash);
+      try {
+        await PgCommon.sleep(); // To smooth out button transition
+        const txHash = await PgTest.test(txVals, idl, conn, currentWallet);
+        setTxHash(txHash);
 
-      const txResult = await PgTx.confirm(txHash, conn);
+        if (preferences.showTxDetailsInTerminal) {
+          return txHash;
+        }
 
-      if (txResult?.err)
-        msg = `${PgTerminal.CROSS}  Test '${ixs.name}' ${PgTerminal.error(
-          "failed"
-        )}.`;
-      else
-        msg = `${PgTerminal.CHECKMARK}  Test '${ixs.name}' ${PgTerminal.success(
-          "passed"
-        )}.`;
-    } catch (e: any) {
-      const convertedError = PgTerminal.convertErrorMessage(e.message);
-      msg = `${PgTerminal.CROSS}  Test '${ixs.name}' ${PgTerminal.error(
-        "failed"
-      )}: ${convertedError}`;
-    } finally {
-      setTerminal(msg + "\n");
-      setLoading(false);
-      PgTerminal.enable();
+        const txResult = await PgTx.confirm(txHash, conn);
+
+        if (txResult?.err) {
+          msg = `${PgTerminal.CROSS}  Test '${ixs.name}' ${PgTerminal.error(
+            "failed"
+          )}.`;
+        } else {
+          msg = `${PgTerminal.CHECKMARK}  Test '${
+            ixs.name
+          }' ${PgTerminal.success("passed")}.`;
+        }
+
+        setTerminal(msg + "\n");
+      } catch (e: any) {
+        const convertedError = PgTerminal.convertErrorMessage(e.message);
+        setTerminal(
+          `${PgTerminal.CROSS}  Test '${ixs.name}' ${PgTerminal.error(
+            "failed"
+          )}: ${convertedError}\n`
+        );
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    if (showLogTxHash) {
+      await PgCommon.sleep(1000);
+      PgTerminal.runCmdFromStr(`solana confirm ${showLogTxHash} -v`);
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
